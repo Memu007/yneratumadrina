@@ -1,0 +1,22 @@
+{
+  "name": "tu-madrina",
+  "version": "0.1.0",
+  "description": "Servicio de accountability por WhatsApp",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "node --test --import tsx tests/*.test.ts",
+    "test:focused": "node --test --import tsx"
+  },
+  "dependencies": {
+    "fastify": "^5.2.1",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "@types/node": "^22.10.0"
+  }
+}
