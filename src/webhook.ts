@@ -54,8 +54,14 @@ async function procesarMensaje(msg: MensajeEntrante): Promise<void> {
   const telefono = msg.from;
   const texto = msg.text?.body || msg.button?.text || '';
 
-  // Comando de prueba: la madrina envía "goal" y el bot envía el goal al ahijado
+  // Comando de prueba: solo la madrina puede disparar goal
   if (texto.toLowerCase() === 'goal') {
+    if (config.testPhoneMadrina && telefono !== config.testPhoneMadrina) {
+      // Ignorar comando de remitente no autorizado
+      const r = await enviarTexto(telefono, 'No autorizado para enviar goals.');
+      if (!r.ok) throw new Error(`Error enviando rechazo: ${r.error}`);
+      return;
+    }
     if (!config.testPhoneAhijado) {
       throw new Error('No hay teléfono de ahijado configurado');
     }

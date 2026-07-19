@@ -2,7 +2,7 @@
 
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { reservarEvento, confirmarProcesado, liberarEvento, limpiarAlmacen, cantidadEventos } from '../src/idempotencia.js';
+import { reservarEvento, confirmarProcesado, liberarEvento, limpiarAlmacen, cantidadEventos, estadoEvento } from '../src/idempotencia.js';
 
 describe('Idempotencia', () => {
   beforeEach(() => limpiarAlmacen());
@@ -45,10 +45,20 @@ describe('Idempotencia', () => {
     assert.equal(cantidadEventos(), 1);
   });
 
-  it('confirmarProcesado mantiene el evento en el almacén', () => {
+  it('confirmarProcesado cambia estado a confirmado', () => {
     reservarEvento('msg_001');
+    assert.equal(estadoEvento('msg_001'), 'reservado');
     confirmarProcesado('msg_001');
+    assert.equal(estadoEvento('msg_001'), 'confirmado');
     assert.equal(cantidadEventos(), 1);
     assert.equal(reservarEvento('msg_001'), false);
+  });
+
+  it('liberarEvento no libera un evento confirmado', () => {
+    reservarEvento('msg_001');
+    confirmarProcesado('msg_001');
+    liberarEvento('msg_001');
+    assert.equal(cantidadEventos(), 1);
+    assert.equal(estadoEvento('msg_001'), 'confirmado');
   });
 });

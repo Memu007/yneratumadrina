@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 // Setear variables de entorno antes de importar config
 process.env.WHATSAPP_VERIFY_TOKEN = 'tu_token_de_verificacion_personalizado';
 process.env.WHATSAPP_APP_SECRET = 'test_secret';
+process.env.TEST_PHONE_MADRINA = '5491100000001';
 process.env.TEST_PHONE_AHIJADO = '5491100000002';
 
 import { verificarWebhook, procesarWebhook } from '../src/webhook.js';
