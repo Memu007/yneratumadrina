@@ -22,6 +22,23 @@ antes de poder enviarla.
 - Idioma: `es_AR`
 - Cuerpo: `Tienes un nuevo goal: {{1}}. Plazo: {{2}}.`
 
+### Graph API v25.0
+
+Se usa la versión `v25.0` de la Graph API de Meta, la versión estable publicada
+en octubre de 2024. La URL base es `https://graph.facebook.com/v25.0`.
+
+### Modelo de cobro por mensaje
+
+A partir de 2024, Meta cobra **por mensaje individual** en lugar de por conversación.
+Cada mensaje enviado (texto o plantilla) tiene un costo según la categoría:
+
+- **Mensajes de servicio** (dentro de ventana 24h): gratuitos si el usuario inició.
+- **Mensajes con plantilla utility**: costo por mensaje según el país del destinatario.
+- **Mensajes con plantilla marketing**: costo mayor que utility.
+
+Los precios exactos varían por país y se consultan en:
+`https://developers.facebook.com/docs/whatsapp/pricing`
+
 ### Pasos para configurar Meta
 
 1. Crear una app en [Meta for Developers](https://developers.facebook.com/).
@@ -30,6 +47,7 @@ antes de poder enviarla.
    - `WHATSAPP_TOKEN` (token de acceso permanente)
    - `WHATSAPP_PHONE_NUMBER_ID` (ID del número de teléfono)
    - `WHATSAPP_BUSINESS_ACCOUNT_ID` (ID de la cuenta de WhatsApp Business)
+   - `WHATSAPP_APP_SECRET` (App Secret para validar firma del webhook)
 4. Configurar el webhook:
    - URL: `https://tu-dominio.com/webhook`
    - Token de verificación: el valor de `WHATSAPP_VERIFY_TOKEN`
@@ -37,26 +55,28 @@ antes de poder enviarla.
 5. Crear y aprobar la plantilla `goal_sintetico` con categoría `utility`.
 6. Copiar `.env.example` a `.env` y completar los valores.
 
-### Prueba real entre dos teléfonos
+### Prueba real entre dos teléfonos (madrina → ahijado)
 
 1. Exponer el servidor con ngrok: `ngrok http 3000`
 2. Configurar la URL del webhook en Meta con la URL de ngrok.
-3. Teléfono A envía cualquier mensaje al número de WhatsApp Business.
-4. El bot responde dentro de la ventana de servicio (texto libre).
-5. Teléfono A envía `goal` y recibe el goal sintético vía plantilla.
-6. Para probar fuera de ventana: esperar 24h o usar el endpoint `/test/plantilla`.
+3. **Madrina** (teléfono A) envía cualquier mensaje al número de WhatsApp Business.
+4. El bot responde a la madrina dentro de la ventana de servicio (texto libre).
+5. **Madrina** envía `goal` → el bot envía el goal sintético al **ahijado** (teléfono B)
+   vía plantilla utility y confirma a la madrina con un texto.
+6. Para probar fuera de ventana: esperar 24h o usar el endpoint `/test/plantilla`
+   (requiere `Authorization: Bearer <ADMIN_TOKEN>`).
 7. Verificar que un webhook repetido no duplica el procesamiento (idempotencia).
 
-### Endpoints de prueba
+### Endpoints
 
-| Endpoint | Método | Descripción |
-|---|---|---|
-| `/health` | GET | Estado del servidor |
-| `/webhook` | GET | Verificación del webhook de Meta |
-| `/webhook` | POST | Recepción de webhooks de Meta |
-| `/test/texto` | POST | Envía texto dentro de ventana |
-| `/test/plantilla` | POST | Envía plantilla fuera de ventana |
-| `/test/goal` | POST | Envía goal sintético con plantilla |
+| Endpoint | Método | Descripción | Auth |
+|---|---|---|---|
+| `/health` | GET | Estado del servidor | No |
+| `/webhook` | GET | Verificación del webhook de Meta | No |
+| `/webhook` | POST | Recepción de webhooks de Meta (valida firma HMAC) | Firma HMAC |
+| `/test/texto` | POST | Envía texto dentro de ventana | Bearer token |
+| `/test/plantilla` | POST | Envía plantilla fuera de ventana | Bearer token |
+| `/test/goal` | POST | Envía goal sintético con plantilla | Bearer token |
 
 ### Limitaciones reales de Meta
 
@@ -68,7 +88,7 @@ antes de poder enviarla.
   disfrazadas de utility. El goal sintético debe ser claramente transaccional.
 - **Reintentos de webhook**: Meta reenvía webhooks no confirmados (HTTP no 200).
   La idempotencia es obligatoria para evitar duplicación.
-- **Cuota de mensajes**: el plan gratuito tiene un límite de conversaciones mensuales.
-  Cada conversación iniciada por plantilla consume una cuota.
+- **Cobro por mensaje**: cada mensaje enviado tiene un costo individual según el país.
+  No hay cuota mensual gratuita; el crédito inicial de prueba se agota.
 - **Número de prueba**: Meta proporciona números de prueba para desarrollo,
   pero solo pueden enviar mensajes a números preconfigurados.

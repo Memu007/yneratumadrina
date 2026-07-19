@@ -2,7 +2,7 @@
 
 import { config } from './config.js';
 
-const API_BASE = 'https://graph.facebook.com/v21.0';
+const API_BASE = 'https://graph.facebook.com/v25.0';
 
 interface RespuestaEnvio {
   ok: boolean;

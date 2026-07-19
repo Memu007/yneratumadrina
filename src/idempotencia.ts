@@ -2,11 +2,22 @@
 
 const eventosProcesados = new Set<string>();
 
-// Devuelve true si el evento es nuevo, false si ya fue procesado
-export function marcarProcesado(idExterno: string): boolean {
+// Reserva un evento: devuelve true si es nuevo, false si ya está procesado o reservado
+export function reservarEvento(idExterno: string): boolean {
   if (eventosProcesados.has(idExterno)) return false;
   eventosProcesados.add(idExterno);
   return true;
+}
+
+// Marca un evento como procesado exitosamente (ya estaba reservado)
+export function confirmarProcesado(idExterno: string): void {
+  // Ya está en el Set, no hay nada que hacer
+  // En una implementación con BD habría un estado: reservado → confirmado
+}
+
+// Libera un evento fallido para permitir reintento
+export function liberarEvento(idExterno: string): void {
+  eventosProcesados.delete(idExterno);
 }
 
 // Limpia el almacén (solo para pruebas)

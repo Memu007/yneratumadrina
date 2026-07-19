@@ -1,6 +1,6 @@
 // Manejo de webhooks de WhatsApp Cloud API
 
-import { marcarProcesado } from './idempotencia.js';
+import { reservarEvento, confirmarProcesado, liberarEvento } from './idempotencia.js';
 import { enviarTexto, enviarGoalSintetico } from './whatsapp.js';
 import { config } from './config.js';
 import type { WebhookPayload, MensajeEntrante } from './tipos.js';
@@ -18,9 +18,10 @@ export function verificarWebhook(query: Record<string, string | string[]>): { ok
 }
 
 // Procesa el payload del webhook con idempotencia
-export async function procesarWebhook(payload: WebhookPayload): Promise<{ procesados: number; duplicados: number }> {
+export async function procesarWebhook(payload: WebhookPayload): Promise<{ procesados: number; duplicados: number; fallidos: number }> {
   let procesados = 0;
   let duplicados = 0;
+  let fallidos = 0;
 
   for (const entry of payload.entry) {
     for (const change of entry.changes) {
@@ -28,35 +29,50 @@ export async function procesarWebhook(payload: WebhookPayload): Promise<{ proces
       if (!messages) continue;
 
       for (const msg of messages) {
-        const esNuevo = marcarProcesado(msg.id);
+        const esNuevo = reservarEvento(msg.id);
         if (!esNuevo) {
           duplicados++;
           continue;
         }
-        await procesarMensaje(msg);
-        procesados++;
+        try {
+          await procesarMensaje(msg);
+          confirmarProcesado(msg.id);
+          procesados++;
+        } catch (err) {
+          liberarEvento(msg.id);
+          fallidos++;
+        }
       }
     }
   }
 
-  return { procesados, duplicados };
+  return { procesados, duplicados, fallidos };
 }
 
-// Procesa un mensaje individual
+// Procesa un mensaje individual con flujo madrina → ahijado
 async function procesarMensaje(msg: MensajeEntrante): Promise<void> {
   const telefono = msg.from;
   const texto = msg.text?.body || msg.button?.text || '';
 
-  // Comando de prueba: enviar goal sintético
+  // Comando de prueba: la madrina envía "goal" y el bot envía el goal al ahijado
   if (texto.toLowerCase() === 'goal') {
-    await enviarGoalSintetico(
-      telefono,
+    if (!config.testPhoneAhijado) {
+      throw new Error('No hay teléfono de ahijado configurado');
+    }
+    // Enviar el goal al ahijado
+    const r1 = await enviarGoalSintetico(
+      config.testPhoneAhijado,
       'Sacar la basura',
       'hoy 20:00'
     );
+    if (!r1.ok) throw new Error(`Error enviando goal: ${r1.error}`);
+    // Confirmar a la madrina que se envió
+    const r2 = await enviarTexto(telefono, 'Goal enviado al ahijado.');
+    if (!r2.ok) throw new Error(`Error enviando confirmación: ${r2.error}`);
     return;
   }
 
   // Echo: responder dentro de ventana de servicio
-  await enviarTexto(telefono, `Recibido: ${texto}`);
+  const r = await enviarTexto(telefono, `Recibido: ${texto}`);
+  if (!r.ok) throw new Error(`Error enviando respuesta: ${r.error}`);
 }
