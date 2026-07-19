@@ -1,4 +1,4 @@
-// Prueba real entre dos teléfonos con mock server HTTP local (sin mock de fetch)
+// Integración HTTP local con mock server y fetch real
 
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,14 +21,20 @@ import { limpiarAlmacen } from '../src/idempotencia.js';
 // Mock server que simula la API de WhatsApp
 const mockApi = Fastify({ logger: false });
 const llamadasApi: { to: string; type: string; template?: string }[] = [];
+let contadorLlamadas = 0;
+let fallarEnLlamada: number | null = null;
 
 mockApi.post('/:phoneId/messages', async (request, reply) => {
+  contadorLlamadas++;
   const body = request.body as Record<string, unknown>;
   llamadasApi.push({
     to: body.to as string,
     type: body.type as string,
     template: (body.template as { name?: string })?.name,
   });
+  if (fallarEnLlamada === contadorLlamadas) {
+    return reply.code(500).send({ error: 'simulated_failure' });
+  }
   return reply.send({ messages: [{ id: 'mock_' + Date.now() }] });
 });
 
@@ -59,7 +65,7 @@ function payloadGoal(from: string, id: string): string {
   });
 }
 
-describe('Prueba real entre dos teléfonos (mock server HTTP, fetch real)', () => {
+describe('Integración HTTP local (mock server, fetch real)', () => {
   let puertoMock = 0;
 
   before(async () => {
@@ -79,6 +85,8 @@ describe('Prueba real entre dos teléfonos (mock server HTTP, fetch real)', () =
   beforeEach(() => {
     limpiarAlmacen();
     llamadasApi.length = 0;
+    contadorLlamadas = 0;
+    fallarEnLlamada = null;
   });
 
   it('madrina envía goal → ahijado recibe template, madrina recibe confirmación', async () => {
@@ -181,5 +189,39 @@ describe('Prueba real entre dos teléfonos (mock server HTTP, fetch real)', () =
       payload: rawBody,
     });
     assert.equal(resp.statusCode, 401);
+  });
+
+  it('confirmación falla, Meta reintenta, ahijado recibe una sola plantilla', async () => {
+    // Llamada 1: goal al ahijado (éxito)
+    // Llamada 2: confirmación a la madrina (falla)
+    fallarEnLlamada = 2;
+
+    const rawBody = payloadGoal('5491100000001', 'msg_real_retry');
+    const headers = {
+      'content-type': 'application/json',
+      'x-hub-signature-256': firmar(rawBody),
+    };
+
+    // Primer webhook: goal se envía, confirmación falla
+    const r1 = await app.inject({ method: 'POST', url: '/webhook', headers, payload: rawBody });
+    assert.equal(r1.statusCode, 200, 'primer webhook debe ser 200 (goal exitoso)');
+
+    // Solo 2 llamadas: 1 template al ahijado + 1 text fallido a la madrina
+    assert.equal(llamadasApi.length, 2);
+    assert.equal(llamadasApi[0].to, '5491100000002');
+    assert.equal(llamadasApi[0].type, 'template');
+
+    // Meta reintenta el mismo webhook
+    fallarEnLlamada = null;
+    const r2 = await app.inject({ method: 'POST', url: '/webhook', headers, payload: rawBody });
+    assert.equal(r2.statusCode, 200, 'reintento debe ser 200 (duplicado)');
+
+    // No debe haber nuevas llamadas: el evento está confirmado
+    assert.equal(llamadasApi.length, 2, 'reintento no debe duplicar envíos');
+    // Contar templates al ahijado: solo 1
+    const templatesAhijado = llamadasApi.filter(
+      l => l.to === '5491100000002' && l.type === 'template'
+    );
+    assert.equal(templatesAhijado.length, 1, 'ahijado recibe una sola plantilla');
   });
 });

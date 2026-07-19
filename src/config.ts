@@ -20,7 +20,7 @@ export const config = {
 
 // Valida que las variables críticas estén presentes (solo al arrancar el servidor)
 export function validarConfig(): void {
-  const requeridas = ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_APP_SECRET', 'ADMIN_TOKEN'];
+  const requeridas = ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_APP_SECRET', 'ADMIN_TOKEN', 'TEST_PHONE_MADRINA', 'TEST_PHONE_AHIJADO'];
   const faltantes = requeridas.filter(k => !process.env[k]);
   if (faltantes.length) {
     throw new Error(`Faltan variables de entorno: ${faltantes.join(', ')}`);

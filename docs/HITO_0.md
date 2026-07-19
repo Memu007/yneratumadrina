@@ -55,17 +55,19 @@ Los precios exactos varían por país y se consultan en:
 5. Crear y aprobar la plantilla `goal_sintetico` con categoría `utility`.
 6. Copiar `.env.example` a `.env` y completar los valores.
 
-### Prueba real entre dos teléfonos (madrina → ahijado)
+### Integración HTTP local (madrina → ahijado)
 
 1. Exponer el servidor con ngrok: `ngrok http 3000`
 2. Configurar la URL del webhook en Meta con la URL de ngrok.
-3. **Madrina** (teléfono A) envía cualquier mensaje al número de WhatsApp Business.
+3. **Madrina** (`TEST_PHONE_MADRINA`) envía cualquier mensaje al número de WhatsApp Business.
 4. El bot responde a la madrina dentro de la ventana de servicio (texto libre).
-5. **Madrina** envía `goal` → el bot envía el goal sintético al **ahijado** (teléfono B)
+5. **Madrina** envía `goal` → el bot envía el goal sintético al **ahijado** (`TEST_PHONE_AHIJADO`)
    vía plantilla utility y confirma a la madrina con un texto.
 6. Para probar fuera de ventana: esperar 24h o usar el endpoint `/test/plantilla`
-   (requiere `Authorization: Bearer <ADMIN_TOKEN>`).
+   (requiere `Authorization: Bearer <ADMIN_TOKEN>`, solo teléfonos permitidos).
 7. Verificar que un webhook repetido no duplica el procesamiento (idempotencia).
+8. Si la confirmación a la madrina falla pero el goal se envió, el evento se confirma
+   para evitar duplicar el goal en el reintento de Meta.
 
 ### Endpoints
 
