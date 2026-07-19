@@ -16,6 +16,9 @@ export function validarFirma(body: string, signatureHeader: string | undefined):
 
   const firmaRecibida = signatureHeader.slice(prefijo.length);
 
+  // Validar formato: 64 caracteres hexadecimales
+  if (!/^[0-9a-f]{64}$/.test(firmaRecibida)) return false;
+
   if (firmaRecibida.length !== firmaEsperada.length) return false;
 
   return timingSafeEqual(

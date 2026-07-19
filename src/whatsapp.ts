@@ -2,7 +2,9 @@
 
 import { config } from './config.js';
 
-const API_BASE = 'https://graph.facebook.com/v25.0';
+function apiBase(): string {
+  return process.env.WHATSAPP_API_BASE || 'https://graph.facebook.com/v25.0';
+}
 
 interface RespuestaEnvio {
   ok: boolean;
@@ -59,7 +61,7 @@ export async function enviarGoalSintetico(telefono: string, tarea: string, plazo
 
 async function enviarMensaje(payload: Record<string, unknown>): Promise<RespuestaEnvio> {
   try {
-    const url = `${API_BASE}/${config.whatsappPhoneNumberId}/messages`;
+    const url = `${apiBase()}/${config.whatsappPhoneNumberId}/messages`;
     const resp = await fetch(url, {
       method: 'POST',
       headers: {

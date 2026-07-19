@@ -56,8 +56,8 @@ async function procesarMensaje(msg: MensajeEntrante): Promise<void> {
 
   // Comando de prueba: solo la madrina puede disparar goal
   if (texto.toLowerCase() === 'goal') {
-    if (config.testPhoneMadrina && telefono !== config.testPhoneMadrina) {
-      // Ignorar comando de remitente no autorizado
+    if (!config.testPhoneMadrina || telefono !== config.testPhoneMadrina) {
+      // Sin madrina configurada o remitente no autorizado: denegar
       const r = await enviarTexto(telefono, 'No autorizado para enviar goals.');
       if (!r.ok) throw new Error(`Error enviando rechazo: ${r.error}`);
       return;
@@ -72,9 +72,12 @@ async function procesarMensaje(msg: MensajeEntrante): Promise<void> {
       'hoy 20:00'
     );
     if (!r1.ok) throw new Error(`Error enviando goal: ${r1.error}`);
-    // Confirmar a la madrina que se envió
+    // Confirmar a la madrina que se envió (no crítico: no liberar si falla)
     const r2 = await enviarTexto(telefono, 'Goal enviado al ahijado.');
-    if (!r2.ok) throw new Error(`Error enviando confirmación: ${r2.error}`);
+    if (!r2.ok) {
+      // El goal ya fue enviado: confirmar para evitar duplicar en reintento
+      console.warn(`Goal enviado pero confirmación falló: ${r2.error}`);
+    }
     return;
   }
 
