@@ -24,12 +24,11 @@ antes de poder enviarla.
 
 ### Graph API v25.0
 
-Se usa la versión `v25.0` de la Graph API de Meta, la versión estable publicada
-en octubre de 2024. La URL base es `https://graph.facebook.com/v25.0`.
+Se usa la versión `v25.0` de la Graph API de Meta. La URL base es `https://graph.facebook.com/v25.0`.
 
 ### Modelo de cobro por mensaje
 
-A partir de 2024, Meta cobra **por mensaje individual** en lugar de por conversación.
+Meta cobra **por mensaje individual** en lugar de por conversación.
 Cada mensaje enviado (texto o plantilla) tiene un costo según la categoría:
 
 - **Mensajes de servicio** (dentro de ventana 24h): gratuitos si el usuario inició.
@@ -55,7 +54,17 @@ Los precios exactos varían por país y se consultan en:
 5. Crear y aprobar la plantilla `goal_sintetico` con categoría `utility`.
 6. Copiar `.env.example` a `.env` y completar los valores.
 
-### Integración HTTP local (madrina → ahijado)
+### Integración HTTP local automatizada
+
+Tests automatizados con `tests/integracion-http-local.test.ts` (mock server Fastify local, fetch real):
+
+- Madrina (`TEST_PHONE_MADRINA`) envía `goal` → ahijado (`TEST_PHONE_AHIJADO`) recibe plantilla `goal_sintetico`
+- Remitente no autorizado no dispara goal
+- Idempotencia: segundo webhook con mismo ID no duplica envíos
+- Confirmación fallida + reintento de Meta: ahijado recibe una sola plantilla
+- Firma con hex inválido o longitud incorrecta → HTTP 401 (no 500)
+
+### Prueba manual con Meta
 
 1. Exponer el servidor con ngrok: `ngrok http 3000`
 2. Configurar la URL del webhook en Meta con la URL de ngrok.
@@ -82,7 +91,7 @@ Los precios exactos varían por país y se consultan en:
 
 ### Limitaciones reales de Meta
 
-- **Ventana de 24h**: fuera de ella, los mensajes libres se rechazan con error 401.
+- **Ventana de 24h**: fuera de ella, los mensajes libres pueden ser rechazados.
   Solo plantillas aprobadas pueden enviarse fuera de ventana.
 - **Aprobación de plantillas**: Meta revisa cada plantilla antes de aprobarla.
   El proceso puede tardar horas o días. Sin aprobación, no se puede enviar.
