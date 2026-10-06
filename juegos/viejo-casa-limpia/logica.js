@@ -52,7 +52,8 @@
       perrosEspantados: 0,
       cacasLevantadas: 0,
       pibesCorridos: 0, // pibes que el viejo sacó a escobazos antes de que tiraran basura
-      vecinosRetados: 0, // veces que el vecino se escondió con la bolsa porque el viejo estaba en el patio // las que levantó el dueño porque lo vio el viejo
+      vecinosRetados: 0, // veces que el vecino se escondió con la bolsa porque el viejo estaba en el patio
+      zapatillasAfuera: 0, // veces que los nietos se sacaron las zapatillas porque el viejo estaba en la casa // las que levantó el dueño porque lo vio el viejo
       proximoPerroConDueno: null, // se sortea con el primer perro y después se alterna
       objetos: { patio: [], casa: [], vereda: [] }, // lo que quedó tirado, del más viejo al más nuevo
       // Lo ocurrido en el último paso, para que la pantalla reaccione (sonido, sacudón).
@@ -102,10 +103,9 @@
       e.conDueno = estado.proximoPerroConDueno;
       estado.proximoPerroConDueno = !e.conDueno;
       e.aviso = e.conDueno ? CONFIG.avisoPerroDueno : avisoEspantable(estado.segundos);
-    } else if (e.tipo === 'pibe' || e.tipo === 'vecino') {
-      e.aviso = avisoEspantable(estado.segundos);
     } else {
-      e.aviso = CONFIG.avisoEvento;
+      // Todos los demás se pueden frenar llegando a tiempo, con el mismo margen.
+      e.aviso = avisoEspantable(estado.segundos);
     }
     e.avisoTotal = e.aviso;
     return e;
@@ -151,13 +151,14 @@
     for (const e of estado.eventos) {
       const viejoAhi = quieto && zonaViejo === e.zona;
       const llego = 1 - e.aviso / e.avisoTotal >= CONFIG.espantable.llegada;
-      const espantable = (e.tipo === 'perro' && !e.conDueno) || e.tipo === 'pibe' || e.tipo === 'vecino';
+      const espantable = !(e.tipo === 'perro' && e.conDueno);
       if (espantable && viejoAhi && llego) {
-        // Si llegan y ven al viejo, se van sin ensuciar: el perro suelto sale rajando, al pibe
-        // lo corre a escobazos y el vecino se esconde con la bolsa detrás de la medianera.
+        // Si llegan y ven al viejo, no ensucian: el perro suelto sale rajando, al pibe lo corre
+        // a escobazos, el vecino se esconde con la bolsa y los nietos se sacan las zapatillas.
         if (e.tipo === 'perro') estado.perrosEspantados += 1;
         else if (e.tipo === 'pibe') estado.pibesCorridos += 1;
-        else estado.vecinosRetados += 1;
+        else if (e.tipo === 'vecino') estado.vecinosRetados += 1;
+        else estado.zapatillasAfuera += 1;
         estado.recienEspantados.push(e);
         continue;
       }

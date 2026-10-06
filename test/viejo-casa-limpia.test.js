@@ -275,3 +275,25 @@ test('si el viejo no está, el vecino tira la bolsa al patio', () => {
   assert.equal(e.vecinosRetados, 0);
   assert.deepEqual(e.objetos.patio, [{ tipo: 'bolsa', lugar: 0.5 }]);
 });
+
+test('si el viejo está en la casa, los nietos se sacan las zapatillas y no embarran', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 999;
+  const casa = e.problemas.casa;
+  e.eventos = [{ tipo: 'nietos', zona: 'casa', suma: 22, objeto: null, lugar: 0.5, aviso: 1.5, avisoTotal: 3 }];
+  V.paso(e, 0.1, quieto);
+  assert.equal(e.zapatillasAfuera, 1);
+  assert.equal(e.recienEspantados.length, 1);
+  assert.ok(e.problemas.casa < casa + 1);
+});
+
+test('si el viejo no está en la casa, los nietos embarran', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 999;
+  e.y = 0;
+  const casa = e.problemas.casa;
+  e.eventos = [{ tipo: 'nietos', zona: 'casa', suma: 22, objeto: null, lugar: 0.5, aviso: 0.05, avisoTotal: 3 }];
+  V.paso(e, 0.1, quieto);
+  assert.equal(e.zapatillasAfuera, 0);
+  assert.ok(e.problemas.casa >= casa + 22);
+});

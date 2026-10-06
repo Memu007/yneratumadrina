@@ -55,6 +55,8 @@
     viejoGana: ['¡Es MI vereda, nene!', '¡Y que no se repita!', '¡Así me gusta!', '¡Llevate la bolsita, campeón!', '¡Educación, se llama!'],
     pibeTiro: ['¡El tacho está en la esquina!', '¡Mal educado!', '¡Te vi, eh! ¡Te vi!', '¡Esta juventud!', '¡Levantá eso, atorrante!'],
     escobazos: ['¡Tomá, atorrante!', '¡Te voy a dar basura a vos!', '¡Rajá de acá, vago!', '¡La escoba no perdona!', '¡Escobazo y a tu casa!', '¡Andá a tirar eso a tu vereda!'],
+    retarNietos: ['¡LAS ZAPATILLAS!', '¡Alto ahí! ¡Zapatillas afuera!', '¡En medias, que encerá el abuelo!', '¡Ni un paso más con ese barro!', '¡Las zapas en la puerta, chicos!'],
+    nietosObedecen: ['¡Uy, el abuelo!', 'Sí, abu...', '¡Perdón, abu!', 'Bueno, bueno...', '¡Fue él!'],
     retarVecino: ['¡Te vi, eh! ¡Guardá esa bolsa!', '¡Ni se le ocurra, vecino!', '¡Esa bolsa va a SU tacho!', '¡Lo tengo junado, eh!', '¡Ahí lo quiero ver!'],
     vecinoSeEsconde: ['Eh... ¡buen día, don!', 'Nada, nada... ¡estaba regando!', '¡Uy! Me confundí de patio.', 'Ehh... ¿qué tal la familia?', 'Yo no fui, eh.'],
     pibeHuye: ['¡Ay! ¡Perdón, don!', '¡Uy, el viejo de la escoba!', '¡No me pegue, abuelo!', '¡Era una joda!', '¡Ya me voy, ya me voy!'],
@@ -742,17 +744,48 @@
       }
       return figuras;
     }
-    // Los nietos entran por la puerta de calle y dan vueltas por la casa con las zapatillas embarradas.
+    // Los nietos suben corriendo por el caminito y entran por la puerta de calle a dar vueltas
+    // con las zapatillas embarradas. Si el abuelo está en la casa, frenan en la puerta,
+    // se sacan las zapatillas y entran en puntas de pie, en medias.
+    const LLEGADA = V.CONFIG.espantable.llegada;
     const figuras = [];
     for (let i = 0; i < 2; i++) {
+      const puerta = { x: 118 + i * 16, y: 342 };
       let x;
       let y;
-      if (a.fase === 'entrando') {
-        const entrada = suave(limitar(p / 0.25));
-        const ang = p * Math.PI * 3.2 + i * Math.PI;
-        x = lerp(125, 230 + Math.cos(ang) * 95, entrada);
-        y = lerp(345, 280 + Math.sin(ang) * 32, entrada);
+      let corriendo = true;
+      let caminando = false;
+      if (a.fase === 'entrando' && p < LLEGADA) {
+        const t = suave(p / LLEGADA);
+        x = puerta.x;
+        y = lerp(470 + i * 12, puerta.y, t);
+      } else if (a.fase === 'entrando') {
+        const adentro = suave(limitar((p - LLEGADA) / 0.15));
+        const ang = (p - LLEGADA) * Math.PI * 4.4 + i * Math.PI;
+        x = lerp(puerta.x, 230 + Math.cos(ang) * 95, adentro);
+        y = lerp(puerta.y, 280 + Math.sin(ang) * 32, adentro);
         a.ninos[i] = { x, y };
+        if (Math.random() < 0.25) pisadas.push({ x, y, vida: 1.6 });
+      } else if (a.fase === 'huyendo') {
+        const t = suave(limitar((a.s - 0.6) / 1.6));
+        x = lerp(puerta.x, 50 + i * 26, t);
+        y = lerp(puerta.y, 300 - i * 18, t);
+        corriendo = false;
+        caminando = a.s > 0.6;
+        if (i === 0) {
+          // Las zapatillas embarradas saltan y quedan en la puerta.
+          const vuelo = limitar(a.s / 0.4);
+          for (let k = 0; k < 4; k++) {
+            const zx = 104 + k * 13 + vuelo * (k - 1.5) * 6;
+            const zy = 352 - Math.sin(vuelo * Math.PI) * 18;
+            figuras.push({ y: zy, dibujar: () => {
+              ctx.fillStyle = k % 2 ? '#e74c3c' : '#2e86de';
+              ctx.beginPath(); ctx.ellipse(zx, zy, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = '#5c3c1e';
+              ctx.fillRect(zx - 6, zy + 1, 12, 2);
+            } });
+          }
+        }
       } else {
         const desde = a.ninos[i] || { x: 230, y: 280 };
         const t = limitar(a.s / 1.2);
@@ -762,8 +795,10 @@
       const anterior = a.ninos[`prev${i}`];
       const dir = anterior && x < anterior ? -1 : 1;
       a.ninos[`prev${i}`] = x;
-      if (a.fase === 'entrando' && Math.random() < 0.25) pisadas.push({ x, y, vida: 1.6 });
-      figuras.push({ y, dibujar: () => dibujarPersona(x, y, { pelo: i ? '#f39c12' : '#5a3418', remera: i ? '#9b59b6' : '#e74c3c', chico: true, corriendo: true, dir }) });
+      figuras.push({ y, dibujar: () => {
+        dibujarPersona(x, y, { pelo: i ? '#f39c12' : '#5a3418', remera: i ? '#9b59b6' : '#e74c3c', chico: true, corriendo, caminando, dir });
+        if (i === 0 && a.fase === 'huyendo' && a.s < 1.8) dibujarGlobo(x + 40, y - 52, a.grito);
+      } });
     }
     return figuras;
   }
@@ -803,7 +838,7 @@
 
   function dibujarFin() {
     const t = suave(limitar((reloj - finDesde) / 0.4));
-    ctx.fillStyle = `rgba(20,20,20,${0.88 * t})`;
+    ctx.fillStyle = `rgba(20,20,20,${0.95 * t})`;
     ctx.fillRect(0, 0, ANCHO, ALTO);
     ctx.save();
     ctx.globalAlpha = t;
@@ -819,10 +854,11 @@
     if (estado.cacasLevantadas > 0) logros.push(`Dueños avergonzados: ${estado.cacasLevantadas}`);
     if (estado.pibesCorridos > 0) logros.push(`Pibes corridos a escobazos: ${estado.pibesCorridos}`);
     if (estado.vecinosRetados > 0) logros.push(`Vecinos retados: ${estado.vecinosRetados}`);
-    logros.forEach((texto, k) => Lienzo.textoCentrado(ctx, texto, 392 + k * 22, 15, '#ccc'));
+    if (estado.zapatillasAfuera > 0) logros.push(`Nietos en medias: ${estado.zapatillasAfuera}`);
+    logros.forEach((texto, k) => Lienzo.textoCentrado(ctx, texto, 395 + k * 21, 15, '#ccc'));
     ctx.fillStyle = '#ffd34d';
-    ctx.beginPath(); ctx.roundRect(30, 440, ANCHO - 60, 56, 14); ctx.fill();
-    Lienzo.textoCentrado(ctx, REINTENTAR[estado.perdioPor], 468, 15, '#222');
+    ctx.beginPath(); ctx.roundRect(30, 510, ANCHO - 60, 56, 14); ctx.fill();
+    Lienzo.textoCentrado(ctx, REINTENTAR[estado.perdioPor], 538, 15, '#222');
     Lienzo.textoCentrado(ctx, 'INERA SARA', ALTO - 30, 14, '#777');
     ctx.restore();
   }
@@ -873,6 +909,11 @@
         decir(azar(FRASES.escobazos));
         const actor = actores.find((a) => a.e === e);
         if (actor) actor.grito = azar(FRASES.pibeHuye);
+      } else if (e.tipo === 'nietos') {
+        SONIDOS.fuera();
+        decir(azar(FRASES.retarNietos));
+        const actor = actores.find((a) => a.e === e);
+        if (actor) actor.grito = azar(FRASES.nietosObedecen);
       } else if (e.tipo === 'vecino') {
         SONIDOS.fuera();
         decir(azar(FRASES.retarVecino));
