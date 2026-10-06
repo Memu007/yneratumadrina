@@ -11,7 +11,7 @@
 </style>
 </head>
 <body>
-<canvas id="juego" aria-label="El Viejo y su Casa Limpia: tocá una zona para ir y mantené apretado para trabajar"></canvas>
+<canvas id="juego" aria-label="El Viejo y su Casa Limpia: tocá el patio, la casa o la vereda para ir y mantené apretado para trabajar"></canvas>
 <script src="../../comun/lienzo.js"></script>
 <script src="logica.js"></script>
 <script>
@@ -21,23 +21,36 @@
   const canvas = document.getElementById('juego');
   const ctx = Lienzo.crearLienzo(canvas);
 
-  const ALTO_ZONA = 170;
-  const X_VIEJO = 130;
-  const NOMBRES = { casa: 'Casa', jardin: 'Pasto', vereda: 'Vereda' };
+  // ---------- Escenario: una sola casa vista desde arriba ----------
+  // Franjas de pantalla de cada zona (patio atrás, casa, jardín de adelante + vereda).
+  const FRANJAS = { patio: [0, 150], casa: [150, 330], vereda: [330, 540] };
+  const NOMBRES = { patio: 'Patio', casa: 'Casa', vereda: 'Adelante' };
+  // Recorrido del viejo: la posición lógica 0..2 se convierte en este camino,
+  // que pasa por la puerta de atrás (0.5) y la de adelante (1.5).
+  const CAMINO = [
+    { y: 0, px: 190, py: 112 },
+    { y: 0.5, px: 120, py: 160 },
+    { y: 1, px: 236, py: 236 },
+    { y: 1.5, px: 125, py: 350 },
+    { y: 2, px: 165, py: 500 },
+  ];
+  const AVISO = V.CONFIG.avisoEvento;
+
   const CAUSAS = {
-    casa: 'Los nietos te ganaron la casa.',
-    jardin: 'El pasto te tapó.',
+    patio: 'El pasto te tapó.',
+    casa: 'No se ve nada por las ventanas.',
     vereda: 'La vereda da vergüenza.',
   };
   const REINTENTAR = {
+    patio: '¿Vas a dejar que gane el pasto?',
     casa: '¿Vas a dejar que ganen los nietos?',
-    jardin: '¿Vas a dejar que gane el pasto?',
     vereda: '¿Vas a dejar que gane el perro?',
   };
   const FRASES_EVENTO = {
-    perro: ['¡Otra vez el perro de la vecina!', 'Me van a matar a disgustos.'],
-    vecino: ['A ver si pasan menos y ensucian menos.', 'Esto antes no pasaba.'],
-    nietos: ['Nietos, sí. Chiqueros, no.', 'Me van a matar a disgustos.'],
+    'perro-vereda': ['¡Otra vez el perro de la vecina!', '¡Levantala, che!'],
+    'vecino-vereda': ['A ver si pasan menos y ensucian menos.', 'Esto antes no pasaba.'],
+    'vecino-patio': ['¡Eh! ¡Que no es un basural!', 'Esto antes no pasaba.'],
+    'nietos-casa': ['Nietos, sí. Chiqueros, no.', 'Me van a matar a disgustos.'],
   };
   const FRASES_SUELTAS = [
     'Yo a tu edad ya tenía la vereda baldeada.',
@@ -46,7 +59,7 @@
     'Me duele la cadera, no la dignidad.',
     'Vamos, viejo, que la casa no se limpia sola.',
   ];
-  const FRASES_ESPANTAR = ['¡Fuera de acá!', '¡Ni se te ocurra!', '¡Andá a cagar a otro lado!'];
+  const FRASES_ESPANTAR = ['¡Fuera de acá!', '¡Ni se te ocurra!', '¡Andá a hacer eso a otro lado!'];
 
   const entrada = { zona: null, trabajar: false };
   let estado = V.crearEstado(Date.now());
@@ -54,10 +67,16 @@
   let reloj = 0; // tiempo de pantalla, para animaciones
   let sacudon = 0;
   let particulas = [];
-  let perrosHuyendo = [];
+  let pisadas = []; // barro que dejan los nietos al correr
+  let toques = []; // anillos donde tocó el jugador
+  let actores = []; // personajes en escena, uno por evento
+  let conocidos = new WeakSet();
   let globo = null; // { texto, hasta }
-  let proximaFraseSuelta = 8;
+  let proximaFraseSuelta = 9;
   let zonaQuieta = 1; // última zona donde el viejo estuvo parado
+  let estabaCaminando = false;
+  let distanciaCaminada = 0;
+  let posViejoPrevia = null;
   let finDesde = 0;
   let proximoSonidoTrabajo = 0;
 
@@ -104,6 +123,7 @@
   }
   const SONIDOS = {
     barrer: () => ruido(0.16, 1400, 0.25),
+    frotar: () => ruido(0.1, 3200, 0.12),
     cortar: () => { tono('square', 2400, 1800, 0.04, 0.06); setTimeout(() => tono('square', 2600, 1900, 0.04, 0.06), 70); },
     plop: () => tono('sine', 320, 70, 0.22, 0.5),
     fuera: () => { tono('square', 520, 760, 0.1, 0.08); setTimeout(() => tono('square', 760, 520, 0.12, 0.08), 110); },
@@ -117,10 +137,15 @@
   function reiniciar() {
     estado = V.crearEstado(Date.now());
     particulas = [];
-    perrosHuyendo = [];
+    pisadas = [];
+    actores = [];
+    conocidos = new WeakSet();
     globo = null;
     zonaQuieta = 1;
-    proximaFraseSuelta = 8;
+    proximaFraseSuelta = 9;
+  }
+  function zonaEnPantalla(y) {
+    return V.ZONAS.findIndex((z) => y < FRANJAS[z][1]);
   }
   canvas.addEventListener('pointerdown', (e) => {
     activarAudio();
@@ -128,8 +153,12 @@
       if (reloj - finDesde > 0.8) reiniciar();
       return;
     }
-    entrada.zona = Math.min(2, Math.floor(Lienzo.puntoLogico(canvas, e).y / ALTO_ZONA));
+    const p = Lienzo.puntoLogico(canvas, e);
+    const zona = zonaEnPantalla(p.y);
+    if (zona < 0) return; // tocó el marcador de abajo
+    entrada.zona = zona;
     entrada.trabajar = true;
+    toques.push({ x: p.x, y: p.y, vida: 0.4 });
   });
   for (const tipo of ['pointerup', 'pointercancel', 'pointerleave']) {
     canvas.addEventListener(tipo, () => { entrada.trabajar = false; });
@@ -146,10 +175,25 @@
   });
   window.addEventListener('keyup', (e) => { if (e.key === ' ') entrada.trabajar = false; });
 
-  // ---------- Dibujos ----------
+  // ---------- Utilidades de dibujo y animación ----------
   const azar = (lista) => lista[Math.floor(Math.random() * lista.length)];
-  // Posiciones fijas para la mugre, así no titila cada cuadro.
-  const MANCHAS = Array.from({ length: 12 }, (_, i) => ({ x: 200 + ((i * 47) % 110), y: 60 + ((i * 53) % 90) }));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const limitar = (t) => Math.max(0, Math.min(1, t));
+  const suave = (t) => t * t * (3 - 2 * t);
+  const salirRebotando = (t) => 1 + 2.7 * Math.pow(t - 1, 3) + 1.7 * Math.pow(t - 1, 2);
+
+  function posicionViejo(y) {
+    for (let i = 1; i < CAMINO.length; i++) {
+      const a = CAMINO[i - 1];
+      const b = CAMINO[i];
+      if (y <= b.y) {
+        const t = (y - a.y) / (b.y - a.y);
+        return { x: lerp(a.px, b.px, t), y: lerp(a.py, b.py, t) };
+      }
+    }
+    const ultimo = CAMINO[CAMINO.length - 1];
+    return { x: ultimo.px, y: ultimo.py };
+  }
 
   function circulo(x, y, r, color) {
     ctx.fillStyle = color;
@@ -166,51 +210,55 @@
     ctx.lineTo(x2, y2);
     ctx.stroke();
   }
+  function sombra(x, y, ancho) {
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.beginPath();
+    ctx.ellipse(x, y, ancho, ancho * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
+  // ---------- Personajes ----------
   // El viejo: calvo con mechones, cejas y bigote blancos, lentes, musculosa y pantuflas.
-  function dibujarViejo(x, y, { caminando, trabajando, triste, herramienta }) {
+  function dibujarViejo(x, y, { paso, trabajando, triste, herramienta }) {
     const PIEL = '#f1c6a0';
     const BLANCO = '#f7f7f2';
-    const paso = caminando ? Math.sin(reloj * Math.PI * 4) * 6 : 0;
-    const bamboleo = trabajando ? Math.sin(reloj * 30) * 3 : 0;
+    const zancada = Math.sin(paso) * 6;
+    const rebote = trabajando ? Math.sin(reloj * 26) * 2 : -Math.abs(Math.sin(paso)) * 2;
+    sombra(x, y, 18);
     ctx.save();
-    ctx.translate(x, y + bamboleo);
-    // Piernas y pantuflas
-    linea(-6, -30, -6 + paso, -4, 6, PIEL);
-    linea(6, -30, 6 - paso, -4, 6, PIEL);
+    ctx.translate(x, y + rebote);
+    linea(-6, -30, -6 + zancada, -4, 6, PIEL);
+    linea(6, -30, 6 - zancada, -4, 6, PIEL);
     ctx.fillStyle = '#7a4a2a';
-    ctx.beginPath(); ctx.ellipse(-7 + paso, -2, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(7 - paso, -2, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
-    // Encorvado
-    ctx.rotate(0.17);
+    ctx.beginPath(); ctx.ellipse(-7 + zancada, -2, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(7 - zancada, -2, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.rotate(0.17); // encorvado
     ctx.fillStyle = '#6b4b2f';
-    ctx.fillRect(-13, -40, 26, 13); // pantalón corto
+    ctx.fillRect(-13, -40, 26, 13);
     ctx.fillStyle = BLANCO;
-    ctx.beginPath(); ctx.roundRect(-14, -68, 28, 32, 6); ctx.fill(); // musculosa
-    // Brazos
+    ctx.beginPath(); ctx.roundRect(-14, -68, 28, 32, 6); ctx.fill();
     if (triste) {
       linea(-13, -62, -20, -46, 5, PIEL); linea(-20, -46, -12, -40, 5, PIEL);
       linea(13, -62, 20, -46, 5, PIEL); linea(20, -46, 12, -40, 5, PIEL);
     } else {
-      linea(-13, -62, -18, -40, 5, PIEL);
-      linea(13, -62, 26, -48, 5, PIEL);
+      linea(-13, -62, -18 - zancada * 0.5, -40, 5, PIEL);
+      const mano = herramienta === 'casa' && trabajando
+        ? { x: 28 + Math.cos(reloj * 9) * 8, y: -66 + Math.sin(reloj * 9) * 8 }
+        : { x: 26, y: -48 };
+      linea(13, -62, mano.x, mano.y, 5, PIEL);
+      if (herramienta && trabajando) dibujarHerramienta(herramienta, mano.x, mano.y);
     }
-    if (herramienta && trabajando) dibujarHerramienta(herramienta, 26, -48);
-    // Cabeza
     circulo(0, -82, 14, PIEL);
     ctx.strokeStyle = BLANCO;
     ctx.lineWidth = 4;
     ctx.beginPath(); ctx.arc(0, -82, 13, Math.PI * 0.75, Math.PI * 1.05); ctx.stroke();
     ctx.beginPath(); ctx.arc(0, -82, 13, Math.PI * 1.95, Math.PI * 0.25); ctx.stroke();
-    // Cejas caídas hacia afuera: cara de malhumor
     linea(-10, -90, -3, triste ? -91 : -88, 3, BLANCO);
     linea(3, triste ? -91 : -88, 10, -90, 3, BLANCO);
-    // Lentes
     ctx.strokeStyle = '#333';
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(-5, -84, 4, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.arc(5, -84, 4, 0, Math.PI * 2); ctx.stroke();
-    // Bigote y boca
     ctx.fillStyle = BLANCO;
     ctx.beginPath(); ctx.ellipse(0, -76, 8, 3.5, 0, 0, Math.PI * 2); ctx.fill();
     if (triste) {
@@ -221,55 +269,70 @@
     ctx.restore();
   }
 
-  function dibujarHerramienta(tipo, x, y) {
-    if (tipo === 'jardin') {
-      // Tijera de podar: dos hojas que se abren y cierran
+  function dibujarHerramienta(zona, x, y) {
+    if (zona === 'patio') {
+      // Tijera de podar que se abre y se cierra
       const apertura = Math.abs(Math.sin(reloj * 14)) * 0.5;
       linea(x, y, x + 14, y - 4, 4, '#c0392b');
       linea(x + 14, y - 4, x + 32, y - 10 - apertura * 14, 3, '#aaa');
       linea(x + 14, y - 4, x + 32, y - 2 + apertura * 14, 3, '#aaa');
+    } else if (zona === 'casa') {
+      // Trapo frotando el vidrio
+      ctx.fillStyle = '#4aa3df';
+      ctx.beginPath(); ctx.roundRect(x - 2, y - 8, 14, 12, 3); ctx.fill();
     } else {
-      // Escoba
-      linea(x - 6, y - 30, x + 10, y + 30, 3, '#a0743f');
-      ctx.fillStyle = '#d9b44a';
+      // Escoba que barre de lado a lado
+      const barrido = Math.sin(reloj * 12) * 8;
+      linea(x - 6, y - 28, x + 8 + barrido, y + 34, 3, '#a0743f');
       ctx.save();
-      ctx.translate(x + 12, y + 34);
-      ctx.rotate(-0.3);
+      ctx.translate(x + 10 + barrido, y + 38);
+      ctx.rotate(-0.3 + barrido * 0.02);
+      ctx.fillStyle = '#d9b44a';
       ctx.fillRect(-10, 0, 20, 10);
       ctx.restore();
     }
   }
 
-  function dibujarPerro(x, y, agachado) {
+  function dibujarPerro(x, y, { agachado, corriendo, dir = 1 }) {
     const MARRON = '#8b5a2b';
-    const pata = agachado ? 0 : Math.sin(reloj * 20) * 4;
+    const pata = agachado ? 0 : Math.sin(reloj * (corriendo ? 34 : 18)) * 4;
+    const temblor = agachado ? Math.sin(reloj * 70) * 1 : 0;
+    sombra(x, y + 2, 18);
     ctx.save();
-    ctx.translate(x, y);
-    linea(-12, -8, -12 + pata, 4, 4, MARRON);
-    linea(10, -8, 10 - pata, 4, 4, MARRON);
+    ctx.translate(x + temblor, y);
+    ctx.scale(dir, 1);
+    linea(-12, -8, -12 + pata, 2, 4, MARRON);
+    linea(10, -8, 10 - pata, 2, 4, MARRON);
     ctx.fillStyle = MARRON;
-    ctx.beginPath(); ctx.ellipse(0, agachado ? -8 : -12, 18, 9, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, agachado ? -6 : -12, 18, 9, agachado ? -0.25 : 0, 0, Math.PI * 2); ctx.fill();
     circulo(20, -22, 8, MARRON);
     ctx.fillStyle = '#5a3418';
     ctx.beginPath(); ctx.ellipse(16, -24, 3, 7, 0.4, 0, Math.PI * 2); ctx.fill();
     circulo(24, -24, 1.5, '#111');
+    circulo(10, -18, 2.5, '#e74c3c'); // collar
     linea(-17, -14, -26, -24 + Math.sin(reloj * 18) * 4, 3, MARRON); // cola
     ctx.restore();
   }
 
-  function dibujarPersona(x, y, { pelo, remera, chico, correr }) {
-    const escala = chico ? 0.7 : 1;
-    const paso = correr ? Math.sin(reloj * 22) * 7 : 0;
+  function dibujarPersona(x, y, { pelo, remera, chico, caminando, corriendo, dir = 1, brazoArriba }) {
+    const escala = chico ? 0.65 : 1;
+    const vel = corriendo ? 24 : 12;
+    const paso = caminando || corriendo ? Math.sin(reloj * vel) * (corriendo ? 8 : 5) : 0;
+    sombra(x, y, 14 * escala);
     ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(escala, escala);
+    ctx.translate(x, y - (corriendo ? Math.abs(Math.sin(reloj * vel)) * 3 : 0));
+    ctx.scale(escala * dir, escala);
     linea(-5, -30, -5 + paso, 0, 6, '#33475b');
     linea(5, -30, 5 - paso, 0, 6, '#33475b');
     ctx.fillStyle = remera;
     ctx.beginPath(); ctx.roundRect(-12, -62, 24, 34, 6); ctx.fill();
+    linea(-10, -58, -14 - paso * 0.5, -36, 5, '#e8b48a');
+    if (brazoArriba) linea(10, -58, 18, -82, 5, '#e8b48a');
+    else linea(10, -58, 14 + paso * 0.5, -36, 5, '#e8b48a');
     circulo(0, -74, 12, '#e8b48a');
     ctx.fillStyle = pelo;
     ctx.beginPath(); ctx.arc(0, -77, 12, Math.PI, 0); ctx.fill();
+    circulo(6, -75, 1.5, '#111');
     ctx.restore();
   }
 
@@ -278,114 +341,285 @@
     circulo(x, y - 6, 5, '#7a4824');
     circulo(x, y - 11, 3, '#8b5a2b');
   }
-  function dibujarBasura(x, y) {
-    ctx.fillStyle = '#fafafa';
-    ctx.fillRect(x - 5, y - 12, 10, 12);
-    ctx.fillStyle = '#d63031';
-    ctx.fillRect(x - 5, y - 12, 10, 3);
-  }
-
-  function dibujarZona(zona, i) {
-    const y0 = i * ALTO_ZONA;
-    const nivel = estado.problemas[zona];
-    if (zona === 'casa') {
-      ctx.fillStyle = '#f6e7cf';
-      ctx.fillRect(0, y0, ANCHO, ALTO_ZONA * 0.55);
-      ctx.fillStyle = '#d9b98f';
-      ctx.fillRect(0, y0 + ALTO_ZONA * 0.55, ANCHO, ALTO_ZONA * 0.45);
-      ctx.fillStyle = '#9ec9e8';
-      ctx.fillRect(220, y0 + 22, 60, 48); // ventana
-      linea(250, y0 + 22, 250, y0 + 70, 3, '#fff');
-      const barro = Math.round((nivel / 100) * MANCHAS.length);
-      for (const m of MANCHAS.slice(0, barro)) {
-        ctx.fillStyle = 'rgba(92, 60, 30, 0.7)';
-        ctx.beginPath(); ctx.ellipse(m.x - 140, y0 + 100 + (m.y % 60), 10, 5, 0, 0, Math.PI * 2); ctx.fill();
-      }
-    } else if (zona === 'jardin') {
-      ctx.fillStyle = '#8fd16a';
-      ctx.fillRect(0, y0, ANCHO, ALTO_ZONA);
-      const alto = 8 + (nivel / 100) * 150;
-      ctx.strokeStyle = '#2f7d1f';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      for (let x = 4; x < ANCHO; x += 8) {
-        ctx.moveTo(x, y0 + ALTO_ZONA);
-        ctx.lineTo(x + Math.sin(x + reloj * 1.5) * 4, y0 + ALTO_ZONA - alto * (0.8 + ((x * 7) % 5) / 20));
-      }
-      ctx.stroke();
+  function dibujarBasura(x, y, k) {
+    if (k % 2) {
+      ctx.fillStyle = '#fafafa';
+      ctx.fillRect(x - 5, y - 12, 10, 12);
+      ctx.fillStyle = '#d63031';
+      ctx.fillRect(x - 5, y - 12, 10, 3);
     } else {
-      ctx.fillStyle = '#c4c4c4';
-      ctx.fillRect(0, y0, ANCHO, ALTO_ZONA);
-      ctx.strokeStyle = '#aaa';
-      ctx.lineWidth = 1;
-      for (let x = 0; x < ANCHO; x += 40) { ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + ALTO_ZONA - 20); ctx.stroke(); }
-      ctx.fillStyle = '#888';
-      ctx.fillRect(0, y0 + ALTO_ZONA - 20, ANCHO, 20); // cordón
-      const mugre = Math.round((nivel / 100) * MANCHAS.length);
-      MANCHAS.slice(0, mugre).forEach((m, k) => (k % 3 === 0 ? dibujarCaca : dibujarBasura)(m.x - 20, y0 + 40 + (m.y % 100)));
+      ctx.fillStyle = '#e9e2cf'; // papel arrugado
+      ctx.beginPath(); ctx.moveTo(x - 7, y); ctx.lineTo(x - 3, y - 9); ctx.lineTo(x + 6, y - 6); ctx.lineTo(x + 7, y + 2); ctx.closePath(); ctx.fill();
     }
-
-    // La zona se pone roja cuando se complica, y late cuando ya casi perdés.
-    if (nivel > 50) {
-      const latido = nivel > 75 ? 0.5 + 0.5 * Math.sin(reloj * 10) : 1;
-      ctx.fillStyle = `rgba(230, 30, 30, ${((nivel - 50) / 50) * 0.35 * latido})`;
-      ctx.fillRect(0, y0, ANCHO, ALTO_ZONA);
-    }
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.font = 'bold 16px system-ui';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(NOMBRES[zona], 10, y0 + 16);
+  }
+  function dibujarBolsa(x, y) {
+    circulo(x, y, 9, '#222');
+    linea(x - 3, y - 9, x - 1, y - 14, 2, '#222');
+    linea(x + 3, y - 9, x + 1, y - 14, 2, '#222');
   }
 
-  function dibujarBarra(zona, i) {
-    const y0 = i * ALTO_ZONA;
+  // ---------- Escenario ----------
+  // Posiciones fijas para la mugre, así no titila cada cuadro.
+  const MUGRE_VEREDA = [[240, 495], [300, 470], [60, 505], [205, 465], [275, 512], [95, 470], [320, 500], [40, 470], [250, 380], [70, 395], [300, 395], [180, 510]];
+  const PISADAS_FIJAS = Array.from({ length: 14 }, (_, i) => [40 + ((i * 83) % 280), 225 + ((i * 37) % 95)]);
+
+  function dibujarPatio(nivel) {
+    ctx.fillStyle = '#86c95f';
+    ctx.fillRect(0, 0, ANCHO, 150);
+    // Tendedero
+    linea(20, 38, 110, 38, 1.5, '#666');
+    [['#e74c3c', 30], ['#3498db', 55], ['#f1c40f', 82]].forEach(([c, x]) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(x, 38, 16, 20 + Math.sin(reloj * 2 + x) * 2);
+    });
+    // Pasto que crece: matas más altas cuanto más descuidado
+    const alto = 6 + (nivel / 100) * 60;
+    ctx.strokeStyle = '#3f8f2a';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let fila = 0; fila < 5; fila++) {
+      const base = 55 + fila * 24;
+      for (let x = 8 + (fila % 2) * 9; x < ANCHO; x += 18) {
+        const h = alto * (0.75 + ((x * 13 + fila * 7) % 10) / 40);
+        const viento = Math.sin(reloj * 1.6 + x * 0.05) * (2 + h * 0.08);
+        for (const d of [-4, 0, 4]) {
+          ctx.moveTo(x + d, base);
+          ctx.lineTo(x + d * 1.6 + viento, base - h);
+        }
+      }
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#b5835a'; // medianera con el vecino
+    ctx.fillRect(ANCHO - 12, 0, 12, 150);
+  }
+
+  function dibujarCasa(nivel) {
+    // Piso de madera
+    ctx.fillStyle = '#d9b38c';
+    ctx.fillRect(0, 150, ANCHO, 182);
+    ctx.strokeStyle = '#c49a72';
+    ctx.lineWidth = 1;
+    for (let y = 230; y < 330; y += 22) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(ANCHO, y); ctx.stroke(); }
+    // Pared del fondo con la puerta al patio y dos ventanas
+    ctx.fillStyle = '#f3e2c3';
+    ctx.fillRect(0, 150, ANCHO, 58);
+    ctx.fillStyle = '#7b5b3a';
+    ctx.fillRect(0, 150, ANCHO, 7);
+    ctx.fillStyle = '#6d4426';
+    ctx.fillRect(100, 160, 42, 48);
+    const suciedad = nivel / 100;
+    for (const vx of [178, 270]) {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(vx - 4, 160, 70, 44);
+      ctx.fillStyle = '#a9d6f5';
+      ctx.fillRect(vx, 164, 62, 36);
+      ctx.fillStyle = `rgba(110, 80, 40, ${suciedad * 0.75})`;
+      ctx.fillRect(vx, 164, 62, 36);
+      if (nivel < 25) linea(vx + 10, 194, vx + 24, 170, 3, 'rgba(255,255,255,0.8)'); // brillo de limpio
+      // Manos de los nietos en el vidrio
+      const manos = Math.floor(nivel / 25);
+      for (let k = 0; k < manos; k++) {
+        const mx = vx + 10 + ((k * 17) % 44);
+        const my = 172 + ((k * 11) % 20);
+        circulo(mx, my, 4, 'rgba(90, 60, 30, 0.6)');
+        for (let d = 0; d < 4; d++) circulo(mx - 4 + d * 2.7, my - 6, 1.3, 'rgba(90, 60, 30, 0.6)');
+      }
+      linea(vx + 31, 164, vx + 31, 200, 3, '#fff');
+    }
+    // Barro en el piso
+    const barro = Math.round(suciedad * PISADAS_FIJAS.length);
+    ctx.fillStyle = 'rgba(92, 60, 30, 0.55)';
+    for (const [px, py] of PISADAS_FIJAS.slice(0, barro)) {
+      ctx.beginPath(); ctx.ellipse(px, py, 4, 6, 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(px + 9, py - 7, 4, 6, 0.3, 0, Math.PI * 2); ctx.fill();
+    }
+    // Paredes laterales y frente cortado, con la puerta de calle
+    ctx.fillStyle = '#7b5b3a';
+    ctx.fillRect(0, 150, 7, 180);
+    ctx.fillRect(ANCHO - 7, 150, 7, 180);
+    ctx.fillRect(0, 326, 100, 6);
+    ctx.fillRect(150, 326, ANCHO - 150, 6);
+  }
+
+  function dibujarAdelante(nivel) {
+    // Jardín de adelante con canteros y caminito
+    ctx.fillStyle = '#92d36e';
+    ctx.fillRect(0, 332, ANCHO, 108);
+    ctx.fillStyle = '#d8cfc0';
+    ctx.fillRect(102, 332, 46, 100);
+    for (const [fx, fy, c] of [[30, 360, '#e84393'], [60, 375, '#fdcb6e'], [210, 360, '#e84393'], [250, 378, '#fdcb6e'], [300, 362, '#a29bfe'], [330, 380, '#e84393']]) {
+      circulo(fx, fy + 6, 7, '#3f8f2a');
+      circulo(fx, fy, 5, c);
+    }
+    // Rejita del frente con portón abierto
+    ctx.fillStyle = '#fff';
+    for (let x = 4; x < ANCHO; x += 14) {
+      if (x > 96 && x < 150) continue;
+      ctx.fillRect(x, 418, 6, 22);
+    }
+    ctx.fillRect(0, 424, 98, 4);
+    ctx.fillRect(150, 424, ANCHO - 150, 4);
+    // Vereda y cordón
+    ctx.fillStyle = '#c4c4c4';
+    ctx.fillRect(0, 440, ANCHO, 82);
+    ctx.strokeStyle = '#b0b0b0';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < ANCHO; x += 40) { ctx.beginPath(); ctx.moveTo(x, 440); ctx.lineTo(x, 522); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(0, 481); ctx.lineTo(ANCHO, 481); ctx.stroke();
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(0, 522, ANCHO, 18);
+    const mugre = Math.round((nivel / 100) * MUGRE_VEREDA.length);
+    MUGRE_VEREDA.slice(0, mugre).forEach(([x, y], k) => (k % 3 === 0 ? dibujarCaca(x, y) : dibujarBasura(x, y, k)));
+  }
+
+  function dibujarAlerta(zona) {
+    // La zona se pone roja cuando se complica, y late cuando ya casi perdés.
     const nivel = estado.problemas[zona];
-    const caminando = Math.abs(estado.y - V.zonaActual(estado)) >= 0.05;
-    // Mientras el viejo camina, la zona que abandonó parpadea.
+    if (nivel <= 50) return;
+    const [y0, y1] = FRANJAS[zona];
+    const latido = nivel > 75 ? 0.5 + 0.5 * Math.sin(reloj * 10) : 1;
+    ctx.fillStyle = `rgba(230, 30, 30, ${((nivel - 50) / 50) * 0.3 * latido})`;
+    ctx.fillRect(0, y0, ANCHO, y1 - y0);
+  }
+
+  function dibujarBarra(zona, i, caminando) {
+    const [y0, y1] = FRANJAS[zona];
+    // Mientras el viejo camina, la zona que dejó parpadea.
     if (caminando && i === zonaQuieta && Math.floor(reloj * 6) % 2 === 0) return;
-    const x = ANCHO - 34;
-    const altoBarra = ALTO_ZONA - 56;
+    const nivel = estado.problemas[zona];
+    const x = ANCHO - 32;
+    const top = y0 + 40;
+    const altoBarra = y1 - y0 - 52;
     const color = nivel > 75 ? '#e02020' : nivel > 50 ? '#f0a000' : '#2a9d3a';
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(x, y0 + 44, 22, altoBarra);
-    ctx.fillStyle = color;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.roundRect(x, top, 20, altoBarra, 6); ctx.fill();
     const h = (altoBarra * nivel) / 100;
-    ctx.fillRect(x, y0 + 44 + altoBarra - h, 22, h);
-    // Carita de estado arriba de la barra
-    circulo(x + 11, y0 + 28, 12, color);
-    circulo(x + 7, y0 + 25, 1.8, '#111');
-    circulo(x + 15, y0 + 25, 1.8, '#111');
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.roundRect(x, top + altoBarra - h, 20, h, 6); ctx.fill();
+    circulo(x + 10, y0 + 24, 12, color);
+    circulo(x + 6, y0 + 21, 1.8, '#111');
+    circulo(x + 14, y0 + 21, 1.8, '#111');
     ctx.strokeStyle = '#111';
     ctx.lineWidth = 1.8;
     ctx.beginPath();
-    if (nivel > 75) ctx.arc(x + 11, y0 + 37, 5, Math.PI * 1.15, Math.PI * 1.85);
-    else if (nivel > 50) { ctx.moveTo(x + 6, y0 + 33); ctx.lineTo(x + 16, y0 + 33); }
-    else ctx.arc(x + 11, y0 + 29, 5, Math.PI * 0.15, Math.PI * 0.85);
+    if (nivel > 75) ctx.arc(x + 10, y0 + 33, 5, Math.PI * 1.15, Math.PI * 1.85);
+    else if (nivel > 50) { ctx.moveTo(x + 5, y0 + 29); ctx.lineTo(x + 15, y0 + 29); }
+    else ctx.arc(x + 10, y0 + 25, 5, Math.PI * 0.15, Math.PI * 0.85);
     ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.font = 'bold 14px system-ui';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(NOMBRES[zona], 12, y0 + 16);
   }
 
-  function dibujarEventos() {
+  // ---------- Actores: cada evento entra, actúa y se va ----------
+  function sincronizarActores(dt) {
     for (const e of estado.eventos) {
-      const i = V.ZONAS.indexOf(e.zona);
-      const suelo = i * ALTO_ZONA + ALTO_ZONA - 28;
-      const avance = 1 - e.aviso / V.CONFIG.avisoEvento;
-      if (e.tipo === 'perro') {
-        dibujarPerro(-30 + Math.min(1, avance / 0.7) * 280, suelo, avance > 0.7);
-      } else if (e.tipo === 'nietos') {
-        dibujarPersona(ANCHO + 20 - avance * (ANCHO + 40), suelo, { pelo: '#5a3418', remera: '#e74c3c', chico: true, correr: true });
-      } else {
-        // El vecino asoma desde la derecha y revolea la bolsa.
-        dibujarPersona(ANCHO - 60, suelo, { pelo: '#999', remera: '#2e86de' });
-        const bx = ANCHO - 60 - avance * 140;
-        const by = suelo - 70 - Math.sin(avance * Math.PI) * 50 + avance * 60;
-        ctx.fillStyle = '#222';
-        ctx.beginPath(); ctx.arc(bx, by, 9, 0, Math.PI * 2); ctx.fill();
+      if (!conocidos.has(e)) {
+        conocidos.add(e);
+        actores.push({ e, fase: 'entrando', s: 0, ninos: [] });
       }
     }
-    for (const p of perrosHuyendo) {
-      dibujarPerro(p.x, p.y, false);
+    for (const a of actores) {
+      if (a.fase === 'entrando' && estado.recienCaidos.includes(a.e)) a.fase = 'saliendo';
+      if (a.fase === 'entrando' && estado.recienEspantados.includes(a.e)) a.fase = 'huyendo';
+      if (a.fase !== 'entrando') a.s += dt;
     }
+    actores = actores.filter((a) => !(a.fase !== 'entrando' && a.s > 3));
+  }
+
+  function progreso(a) {
+    return limitar(1 - a.e.aviso / AVISO);
+  }
+
+  // Devuelve una lista de { y, dibujar } para ordenar por profundidad con el viejo.
+  function figurasActor(a) {
+    const p = progreso(a);
+    const tipo = `${a.e.tipo}-${a.e.zona}`;
+    if (tipo === 'perro-vereda') {
+      // Un vecino pasea al perro; el perro frena, se agacha y el dueño silba mirando para otro lado.
+      let px;
+      let duenoX;
+      let corriendo = false;
+      if (a.fase === 'entrando') {
+        px = lerp(-60, 255, suave(limitar(p / 0.6)));
+        duenoX = px - 58;
+      } else if (a.fase === 'saliendo') {
+        px = 255 + a.s * 90;
+        duenoX = px - 58;
+      } else {
+        corriendo = true;
+        px = 255 + a.s * 340;
+        duenoX = 197 + a.s * 230;
+      }
+      const agachado = a.fase === 'entrando' && p > 0.65;
+      const caminando = a.fase !== 'entrando' || p < 0.6;
+      return [
+        { y: 478, dibujar: () => {
+          dibujarPersona(duenoX, 478, { pelo: '#2d3436', remera: '#00b894', caminando, corriendo });
+          linea(duenoX + 14, 442, px + 10, 482, 1.5, '#c0392b'); // correa
+          if (agachado) {
+            ctx.fillStyle = '#333';
+            ctx.font = '16px serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('♪', duenoX + 8 + Math.sin(reloj * 4) * 3, 392 - (reloj * 20) % 14);
+          }
+          if (a.fase === 'huyendo' && a.s < 1.2) dibujarGlobo(duenoX, 380, '¡Perdón, don!');
+        } },
+        { y: 500, dibujar: () => dibujarPerro(px, 500, { agachado, corriendo }) },
+      ];
+    }
+    if (tipo === 'vecino-vereda') {
+      // Pasa caminando, toma algo y revolea el vaso sin frenar.
+      const x = a.fase === 'entrando' ? lerp(400, 200, p) : 200 - a.s * 80;
+      const figuras = [{ y: 462, dibujar: () => dibujarPersona(x, 462, { pelo: '#999', remera: '#2e86de', caminando: true, dir: -1, brazoArriba: p > 0.75 && a.fase === 'entrando' }) }];
+      if (a.fase === 'entrando' && p > 0.75) {
+        const t = (p - 0.75) / 0.25;
+        figuras.push({ y: 999, dibujar: () => dibujarBasura(lerp(x - 14, 240, t), lerp(390, 495, t) - Math.sin(t * Math.PI) * 50, 1) });
+      }
+      return figuras;
+    }
+    if (tipo === 'vecino-patio') {
+      // El vecino se asoma por la medianera y tira la bolsa por arriba.
+      const asomo = a.fase === 'entrando' ? salirRebotando(limitar(p / 0.3)) : 1 - limitar(a.s / 0.5);
+      const x = ANCHO + 30 - asomo * 70;
+      const figuras = [{ y: 90, dibujar: () => {
+        dibujarPersona(x, 100, { pelo: '#999', remera: '#e17055', dir: -1, brazoArriba: p > 0.55 && a.fase === 'entrando' });
+        ctx.fillStyle = '#b5835a'; // medianera
+        ctx.fillRect(ANCHO - 12, 0, 12, 150);
+      } }];
+      if (a.fase === 'entrando' && p > 0.6) {
+        const t = (p - 0.6) / 0.4;
+        figuras.push({ y: 999, dibujar: () => dibujarBolsa(lerp(x - 10, 250, t), lerp(30, 112, t) - Math.sin(t * Math.PI) * 45) });
+      }
+      return figuras;
+    }
+    // Los nietos entran por la puerta de calle y dan vueltas por la casa con las zapatillas embarradas.
+    const figuras = [];
+    for (let i = 0; i < 2; i++) {
+      let x;
+      let y;
+      if (a.fase === 'entrando') {
+        const entrada = suave(limitar(p / 0.25));
+        const ang = p * Math.PI * 3.2 + i * Math.PI;
+        x = lerp(125, 230 + Math.cos(ang) * 95, entrada);
+        y = lerp(345, 280 + Math.sin(ang) * 32, entrada);
+        a.ninos[i] = { x, y };
+      } else {
+        const desde = a.ninos[i] || { x: 230, y: 280 };
+        const t = limitar(a.s / 1.2);
+        x = lerp(desde.x, 125 + i * 14, t);
+        y = lerp(desde.y, 620, t); // salen por el portón y se pierden abajo
+      }
+      const anterior = a.ninos[`prev${i}`];
+      const dir = anterior && x < anterior ? -1 : 1;
+      a.ninos[`prev${i}`] = x;
+      if (a.fase === 'entrando' && Math.random() < 0.25) pisadas.push({ x, y, vida: 1.6 });
+      figuras.push({ y, dibujar: () => dibujarPersona(x, y, { pelo: i ? '#f39c12' : '#5a3418', remera: i ? '#9b59b6' : '#e74c3c', chico: true, corriendo: true, dir }) });
+    }
+    return figuras;
   }
 
   function dibujarGlobo(x, y, texto) {
@@ -405,26 +639,30 @@
 
   function dibujarHud() {
     ctx.fillStyle = '#222';
-    ctx.fillRect(0, 3 * ALTO_ZONA, ANCHO, ALTO - 3 * ALTO_ZONA);
+    ctx.fillRect(0, 540, ANCHO, ALTO - 540);
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 26px system-ui';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`${Math.floor(estado.segundos)}s`, 16, ALTO - 84);
+    ctx.fillText(`${Math.floor(estado.segundos)}s`, 16, 572);
     ctx.font = 'bold 18px system-ui';
     ctx.textAlign = 'right';
-    ctx.fillText(`Récord ${record}s`, ANCHO - 16, ALTO - 84);
+    ctx.fillText(`Récord ${record}s`, ANCHO - 16, 572);
     ctx.fillStyle = '#aaa';
     ctx.font = '13px system-ui';
     ctx.textAlign = 'center';
-    ctx.fillText('Tocá una zona para ir · mantené para trabajar', ANCHO / 2, ALTO - 44);
-    ctx.fillText('Si estás barriendo la vereda, el perro no se anima', ANCHO / 2, ALTO - 22);
+    ctx.fillText('Tocá una zona para ir · mantené para trabajar', ANCHO / 2, 606);
+    ctx.fillText('Barriendo la vereda, el perro no se anima', ANCHO / 2, 626);
   }
 
   function dibujarFin() {
-    ctx.fillStyle = 'rgba(20,20,20,0.88)';
+    const t = suave(limitar((reloj - finDesde) / 0.4));
+    ctx.fillStyle = `rgba(20,20,20,${0.88 * t})`;
     ctx.fillRect(0, 0, ANCHO, ALTO);
-    dibujarViejo(ANCHO / 2, 170, { triste: true });
+    ctx.save();
+    ctx.globalAlpha = t;
+    ctx.translate(0, (1 - t) * 30);
+    dibujarViejo(ANCHO / 2, 170, { paso: 0, triste: true });
     Lienzo.textoCentrado(ctx, 'Se te vino la noche, abuelo.', 215, 22, '#fff');
     Lienzo.textoCentrado(ctx, CAUSAS[estado.perdioPor], 245, 16, '#ccc');
     Lienzo.textoCentrado(ctx, `${Math.floor(estado.segundos)}s`, 310, 64, '#ffd34d');
@@ -437,61 +675,69 @@
     ctx.beginPath(); ctx.roundRect(30, 440, ANCHO - 60, 56, 14); ctx.fill();
     Lienzo.textoCentrado(ctx, REINTENTAR[estado.perdioPor], 468, 15, '#222');
     Lienzo.textoCentrado(ctx, 'INERA SARA', ALTO - 30, 14, '#777');
+    ctx.restore();
   }
 
-  // ---------- Reacciones y partículas ----------
+  // ---------- Reacciones, partículas y frases ----------
   function decir(texto, segundos) {
     globo = { texto, hasta: reloj + (segundos || 2.4) };
   }
 
-  function reaccionar(dt) {
-    const caminando = Math.abs(estado.y - V.zonaActual(estado)) >= 0.05;
+  function reaccionar(dt, viejo, caminando, trabajando) {
     if (!caminando) zonaQuieta = V.zonaActual(estado);
-    const trabajando = entrada.trabajar && !caminando && estado.fase === 'jugando';
+    if (caminando && !estabaCaminando && !globo && Math.random() < 0.4) decir('Ufff...', 1);
+    if (!caminando && estabaCaminando) {
+      for (let k = 0; k < 6; k++) particulas.push({ x: viejo.x + (Math.random() - 0.5) * 20, y: viejo.y, vx: (Math.random() - 0.5) * 60, vy: -20 - Math.random() * 30, vida: 0.35, color: 'rgba(120,100,80,0.6)', g: 60 });
+    }
+    estabaCaminando = caminando;
 
     for (const e of estado.recienCaidos) {
-      sacudon = 0.25;
+      sacudon = 0.2;
       SONIDOS.plop();
       vibrar(30);
-      decir(azar(FRASES_EVENTO[e.tipo]));
+      decir(azar(FRASES_EVENTO[`${e.tipo}-${e.zona}`]));
     }
     for (const e of estado.recienEspantados) {
       SONIDOS.fuera();
+      vibrar(15);
       decir(azar(FRASES_ESPANTAR));
-      perrosHuyendo.push({ x: 200, y: V.ZONAS.indexOf(e.zona) * ALTO_ZONA + ALTO_ZONA - 28, vida: 1.2 });
     }
-    perrosHuyendo = perrosHuyendo.filter((p) => (p.vida -= dt) > 0);
-    for (const p of perrosHuyendo) p.x -= 360 * dt;
 
     if (trabajando) {
       const zona = V.ZONAS[V.zonaActual(estado)];
-      const yViejo = V.zonaActual(estado) * ALTO_ZONA + ALTO_ZONA - 28;
       if (reloj >= proximoSonidoTrabajo) {
-        (zona === 'jardin' ? SONIDOS.cortar : SONIDOS.barrer)();
-        proximoSonidoTrabajo = reloj + 0.28;
+        ({ patio: SONIDOS.cortar, casa: SONIDOS.frotar, vereda: SONIDOS.barrer })[zona]();
+        proximoSonidoTrabajo = reloj + (zona === 'casa' ? 0.18 : 0.28);
       }
-      for (let k = 0; k < 2; k++) {
-        particulas.push({
-          x: X_VIEJO + 40 + Math.random() * 20,
-          y: yViejo - (zona === 'jardin' ? 30 : 4),
-          vx: 40 + Math.random() * 120,
-          vy: -60 - Math.random() * 90,
-          vida: 0.6,
-          color: zona === 'jardin' ? '#3a9a2a' : '#c8a878',
-        });
+      if (zona === 'casa') {
+        if (Math.random() < 0.4) particulas.push({ x: viejo.x + 30 + Math.random() * 20, y: viejo.y - 70, vx: (Math.random() - 0.5) * 30, vy: -20, vida: 0.9, color: 'rgba(255,255,255,0.9)', g: -10, burbuja: true });
+      } else {
+        for (let k = 0; k < 2; k++) {
+          particulas.push({
+            x: viejo.x + 34 + Math.random() * 16,
+            y: viejo.y - (zona === 'patio' ? 44 : 4),
+            vx: 40 + Math.random() * 110,
+            vy: -60 - Math.random() * 90,
+            vida: 0.6,
+            color: zona === 'patio' ? '#3a9a2a' : '#c8a878',
+            g: 300,
+          });
+        }
       }
     }
-    particulas = particulas.filter((p) => (p.vida -= dt) > 0);
+    for (const lista of [particulas, pisadas, toques]) for (const p of lista) p.vida -= dt;
+    particulas = particulas.filter((p) => p.vida > 0);
+    pisadas = pisadas.filter((p) => p.vida > 0);
+    toques = toques.filter((p) => p.vida > 0);
     for (const p of particulas) {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.vy += 300 * dt;
+      p.vy += p.g * dt;
     }
 
-    if (caminando && !globo) decir('Ufff...', 0.8);
     proximaFraseSuelta -= dt;
     if (proximaFraseSuelta <= 0) {
-      if (!globo) decir(azar(FRASES_SUELTAS), 2.8);
+      if (!globo && !caminando) decir(azar(FRASES_SUELTAS), 2.8);
       proximaFraseSuelta = 9 + Math.random() * 5;
     }
     if (globo && reloj > globo.hasta) globo = null;
@@ -508,28 +754,49 @@
       SONIDOS.perder();
       vibrar(200);
     }
-    reaccionar(dt);
+    const viejo = posicionViejo(estado.y);
+    if (posViejoPrevia) distanciaCaminada += Math.hypot(viejo.x - posViejoPrevia.x, viejo.y - posViejoPrevia.y);
+    posViejoPrevia = viejo;
+    const caminando = Math.abs(estado.y - V.zonaActual(estado)) >= 0.05;
+    const trabajando = entrada.trabajar && !caminando && estado.fase === 'jugando';
+    sincronizarActores(dt);
+    reaccionar(dt, viejo, caminando, trabajando);
 
     ctx.save();
     if (sacudon > 0) {
-      const fuerza = (sacudon / 0.25) * 7;
+      const fuerza = (sacudon / 0.2) * 5;
       ctx.translate((Math.random() - 0.5) * fuerza, (Math.random() - 0.5) * fuerza);
     }
-    V.ZONAS.forEach(dibujarZona);
-    dibujarEventos();
-    const caminando = Math.abs(estado.y - V.zonaActual(estado)) >= 0.05;
-    const yViejo = estado.y * ALTO_ZONA + ALTO_ZONA - 28;
-    dibujarViejo(X_VIEJO, yViejo, {
-      caminando,
-      trabajando: entrada.trabajar && !caminando,
+    dibujarPatio(estado.problemas.patio);
+    dibujarCasa(estado.problemas.casa);
+    dibujarAdelante(estado.problemas.vereda);
+    for (const p of pisadas) {
+      ctx.fillStyle = `rgba(92, 60, 30, ${0.5 * Math.min(1, p.vida)})`;
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, 3, 5, 0.3, 0, Math.PI * 2); ctx.fill();
+    }
+    V.ZONAS.forEach(dibujarAlerta);
+
+    // Personajes ordenados por profundidad: el de más abajo tapa al de más arriba.
+    const figuras = actores.flatMap(figurasActor);
+    figuras.push({ y: viejo.y, dibujar: () => dibujarViejo(viejo.x, viejo.y, {
+      paso: distanciaCaminada * 0.16,
+      trabajando,
       herramienta: V.ZONAS[V.zonaActual(estado)],
-    });
+    }) });
+    figuras.sort((a, b) => a.y - b.y).forEach((f) => f.dibujar());
+
     for (const p of particulas) {
       ctx.fillStyle = p.color;
-      ctx.fillRect(p.x, p.y, 4, 4);
+      if (p.burbuja) { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill(); }
+      else ctx.fillRect(p.x, p.y, 4, 4);
     }
-    V.ZONAS.forEach(dibujarBarra);
-    if (globo) dibujarGlobo(X_VIEJO, yViejo - 100, globo.texto);
+    for (const t of toques) {
+      ctx.strokeStyle = `rgba(255,255,255,${t.vida / 0.4})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(t.x, t.y, 10 + (0.4 - t.vida) * 60, 0, Math.PI * 2); ctx.stroke();
+    }
+    V.ZONAS.forEach((z, i) => dibujarBarra(z, i, caminando));
+    if (globo) dibujarGlobo(viejo.x, viejo.y - 100, globo.texto);
     ctx.restore();
     dibujarHud();
     if (estado.fase === 'fin') dibujarFin();

@@ -1,23 +1,23 @@
 // Lógica pura de El Viejo y su Casa Limpia. Sin DOM: se prueba con `node --test`.
 (function (root) {
-  // Zonas de arriba hacia abajo en la pantalla.
-  const ZONAS = ['casa', 'jardin', 'vereda'];
+  // Zonas de arriba hacia abajo: patio de atrás, casa, jardín de adelante con la vereda.
+  const ZONAS = ['patio', 'casa', 'vereda'];
   const CONFIG = {
     velocidadViejo: 0.9, // zonas por segundo: el viejo es lento a propósito
     velocidadTrabajo: 30, // problema quitado por segundo
     // Cuánto empeora cada zona por segundo al comienzo.
-    deterioro: { casa: 2, jardin: 3, vereda: 1.2 },
+    deterioro: { patio: 3, casa: 2, vereda: 1.2 },
     rampa: 75, // el deterioro suma su valor base cada 75 s (crecimiento lineal)
     avisoEvento: 2,
     intervaloMinimo: 2.5,
     sinRepetirHasta: 60, // antes de esto, dos eventos seguidos nunca caen en la misma zona
     // El pasto alto en la primera imagen enseña qué hacer sin tutorial.
-    inicio: { casa: 35, jardin: 55, vereda: 20 },
+    inicio: { patio: 55, casa: 35, vereda: 20 },
   };
   const EVENTOS = [
     { tipo: 'perro', zona: 'vereda', suma: 25 },
     { tipo: 'vecino', zona: 'vereda', suma: 18 },
-    { tipo: 'vecino', zona: 'jardin', suma: 18 },
+    { tipo: 'vecino', zona: 'patio', suma: 18 },
     { tipo: 'nietos', zona: 'casa', suma: 22 },
   ];
 
@@ -35,7 +35,7 @@
       semilla: semilla >>> 0 || 1,
       fase: 'jugando',
       segundos: 0,
-      y: 1, // posición del viejo en zonas (0..2)
+      y: 1, // posición del viejo en zonas (0..2); arranca en la casa
       problemas: { ...CONFIG.inicio }, // 100 = perdiste
       eventos: [],
       proximoEvento: 4,

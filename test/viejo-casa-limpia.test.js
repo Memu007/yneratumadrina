@@ -17,8 +17,8 @@ test('trabajar mejora solo la zona donde está el viejo', () => {
   e.proximoEvento = 99;
   const antes = { ...e.problemas };
   V.paso(e, 0.5, { zona: null, trabajar: true });
-  assert.ok(e.problemas.jardin < antes.jardin);
-  assert.ok(e.problemas.casa > antes.casa);
+  assert.ok(e.problemas.casa < antes.casa);
+  assert.ok(e.problemas.patio > antes.patio);
   assert.ok(e.problemas.vereda > antes.vereda);
 });
 
@@ -36,9 +36,9 @@ test('el viejo camina lento y no trabaja mientras camina', () => {
 test('los problemas nunca bajan de cero', () => {
   const e = V.crearEstado(3);
   e.proximoEvento = 99;
-  e.problemas.jardin = 1;
+  e.problemas.casa = 1;
   V.paso(e, 1, { zona: null, trabajar: true });
-  assert.equal(e.problemas.jardin, 0);
+  assert.equal(e.problemas.casa, 0);
 });
 
 test('el perro deja su regalo en la vereda cuando termina el aviso', () => {
@@ -82,7 +82,7 @@ test('aparecen eventos, se acelera y es reproducible con la misma semilla', () =
 
 test('arranca con el pasto alto para que se entienda qué hacer', () => {
   const e = V.crearEstado(3);
-  assert.ok(e.problemas.jardin > e.problemas.casa && e.problemas.jardin > e.problemas.vereda);
+  assert.ok(e.problemas.patio > e.problemas.casa && e.problemas.patio > e.problemas.vereda);
 });
 
 test('el viejo trabajando en la vereda espanta al perro antes de que cague', () => {
@@ -134,7 +134,7 @@ test('antes del minuto nunca caen dos eventos seguidos en la misma zona', () => 
     while (e.segundos < 59 && e.fase === 'jugando') {
       const antes = e.eventos.length;
       V.paso(e, 0.05, { zona: null, trabajar: true });
-      e.problemas = { casa: 0, jardin: 0, vereda: 0 };
+      e.problemas = { casa: 0, patio: 0, vereda: 0 };
       if (e.eventos.length > antes) {
         const zona = e.eventos[e.eventos.length - 1].zona;
         assert.notEqual(zona, anterior);
