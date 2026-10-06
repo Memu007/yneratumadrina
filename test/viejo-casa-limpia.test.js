@@ -85,25 +85,35 @@ test('arranca con el pasto alto para que se entienda qué hacer', () => {
   assert.ok(e.problemas.patio > e.problemas.casa && e.problemas.patio > e.problemas.vereda);
 });
 
-test('el viejo trabajando en la vereda espanta al perro antes de que cague', () => {
+test('el perro suelto se escapa si al llegar ve al viejo en la vereda', () => {
   const e = V.crearEstado(3);
   e.proximoEvento = 99;
   e.y = 2;
-  e.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, aviso: 1 }];
-  V.paso(e, 0.1, { zona: null, trabajar: true });
+  e.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, aviso: 1.5, avisoTotal: 3 }];
+  V.paso(e, 0.1, quieto);
   assert.equal(e.eventos.length, 0);
   assert.equal(e.perrosEspantados, 1);
   assert.equal(e.recienEspantados.length, 1);
   assert.equal(e.recienCaidos.length, 0);
 });
 
-test('al vecino no se lo espanta, y al perro tampoco si el viejo no trabaja', () => {
+test('el perro suelto no se espanta antes de terminar de entrar', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 99;
+  e.y = 2;
+  e.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, aviso: 2.9, avisoTotal: 3 }];
+  V.paso(e, 0.1, quieto);
+  assert.equal(e.eventos.length, 1);
+  assert.equal(e.perrosEspantados, 0);
+});
+
+test('al vecino no se lo espanta, y al perro tampoco si el viejo no está en la vereda', () => {
   const e = V.crearEstado(3);
   e.proximoEvento = 99;
   e.y = 2;
   e.eventos = [
-    { tipo: 'vecino', zona: 'vereda', suma: 18, aviso: 1 },
-    { tipo: 'perro', zona: 'vereda', suma: 25, aviso: 1 },
+    { tipo: 'vecino', zona: 'vereda', suma: 18, aviso: 1, avisoTotal: 2 },
+    { tipo: 'perro', zona: 'vereda', suma: 25, aviso: 1, avisoTotal: 2 },
   ];
   V.paso(e, 0.1, { zona: null, trabajar: true });
   assert.equal(e.eventos.length, 1);
@@ -112,7 +122,8 @@ test('al vecino no se lo espanta, y al perro tampoco si el viejo no trabaja', ()
   const f = V.crearEstado(3);
   f.proximoEvento = 99;
   f.y = 2;
-  f.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, aviso: 1 }];
+  f.y = 1;
+  f.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, aviso: 1, avisoTotal: 2 }];
   V.paso(f, 0.1, quieto);
   assert.equal(f.eventos.length, 1);
 });
@@ -177,19 +188,20 @@ test('al perro con dueño no se lo espanta: el dueño putea una sola vez y caga 
   assert.equal(e.recienCaidos.length, 1);
 });
 
-test('el perro suelto caga más rápido que el que viene con dueño', () => {
-  let solos = 0;
-  let conDueno = 0;
-  for (let semilla = 1; semilla <= 60; semilla++) {
-    const e = V.crearEstado(semilla);
-    e.proximoEvento = 0;
-    e.ultimaZonaEvento = 'casa';
-    V.paso(e, 0.01, quieto);
-    const ev = e.eventos[0];
-    if (ev.tipo !== 'perro') continue;
-    if (ev.conDueno) { conDueno++; assert.equal(ev.avisoTotal, V.CONFIG.avisoEvento); }
-    else { solos++; assert.equal(ev.avisoTotal, V.CONFIG.avisoPerroSolo); }
+test('perros sueltos y con dueño se alternan, y el suelto da tiempo de llegar desde el patio', () => {
+  const e = V.crearEstado(11);
+  const perros = [];
+  const vistos = new Set();
+  while (perros.length < 6) {
+    V.paso(e, 0.05, quieto);
+    e.problemas = { patio: 0, casa: 0, vereda: 0 };
+    for (const ev of e.eventos) {
+      if (ev.tipo === 'perro' && !vistos.has(ev)) { vistos.add(ev); perros.push(ev); }
+    }
   }
-  assert.ok(solos > 0 && conDueno > 0);
-  assert.ok(V.CONFIG.avisoPerroSolo < V.CONFIG.avisoEvento);
+  for (let i = 1; i < perros.length; i++) assert.notEqual(perros[i].conDueno, perros[i - 1].conDueno);
+  const caminataDesdePatio = 2 / V.CONFIG.velocidadViejo;
+  assert.ok(V.avisoPerroSolo(0) > caminataDesdePatio + 0.4);
+  assert.ok(V.avisoPerroSolo(300) < V.avisoPerroSolo(0));
+  assert.equal(V.avisoPerroSolo(1000), V.CONFIG.perroSolo.avisoMinimo);
 });

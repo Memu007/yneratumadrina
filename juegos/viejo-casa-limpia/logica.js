@@ -9,7 +9,10 @@
     deterioro: { patio: 3, casa: 2, vereda: 1.2 },
     rampa: 75, // el deterioro suma su valor base cada 75 s (crecimiento lineal)
     avisoEvento: 2,
-    avisoPerroSolo: 1.3, // el perro sin dueño caga rápido: hay que llegar a tiempo
+    // Perro suelto: el aviso alcanza para reaccionar (~0.4 s) y caminar desde el patio
+    // hasta la vereda (2.2 s). Con el tiempo se acorta y desde el patio ya no se llega.
+    perroSolo: { avisoInicial: 3, avisoMinimo: 2, rampa: 90, llegada: 0.35 },
+    avisoPerroDueno: 2.5,
     unidadMugre: 8, // cada 8 puntos de problema entra un objeto tirado en la zona
     intervaloMinimo: 2.5,
     sinRepetirHasta: 60, // antes de esto, dos eventos seguidos nunca caen en la misma zona
@@ -17,11 +20,12 @@
     inicio: { patio: 55, casa: 35, vereda: 20 },
   };
   // `objeto` es lo que queda tirado en la zona; sin perro no hay caca.
+  // `peso`: qué tan seguido sale cada evento; el perro es la estrella.
   const EVENTOS = [
-    { tipo: 'perro', zona: 'vereda', suma: 25, objeto: 'caca' },
-    { tipo: 'vecino', zona: 'vereda', suma: 18, objeto: 'vaso' },
-    { tipo: 'vecino', zona: 'patio', suma: 18, objeto: 'bolsa' },
-    { tipo: 'nietos', zona: 'casa', suma: 22, objeto: null },
+    { tipo: 'perro', zona: 'vereda', suma: 25, objeto: 'caca', peso: 2 },
+    { tipo: 'vecino', zona: 'vereda', suma: 18, objeto: 'vaso', peso: 1 },
+    { tipo: 'vecino', zona: 'patio', suma: 18, objeto: 'bolsa', peso: 1.5 },
+    { tipo: 'nietos', zona: 'casa', suma: 22, objeto: null, peso: 1.5 },
   ];
 
   function aleatorio(estado) {
@@ -45,6 +49,7 @@
       ultimaZonaEvento: null,
       perdioPor: null,
       perrosEspantados: 0,
+      proximoPerroConDueno: null, // se sortea con el primer perro y después se alterna
       objetos: { patio: [], casa: [], vereda: [] }, // lo que quedó tirado, del más viejo al más nuevo
       // Lo ocurrido en el último paso, para que la pantalla reaccione (sonido, sacudón).
       recienCaidos: [],
@@ -70,15 +75,28 @@
       estado.segundos < CONFIG.sinRepetirHasta
         ? EVENTOS.filter((e) => e.zona !== estado.ultimaZonaEvento)
         : EVENTOS;
-    return candidatos[Math.floor(aleatorio(estado) * candidatos.length)];
+    let tirada = aleatorio(estado) * candidatos.reduce((suma, e) => suma + e.peso, 0);
+    for (const e of candidatos) {
+      tirada -= e.peso;
+      if (tirada < 0) return e;
+    }
+    return candidatos[candidatos.length - 1];
+  }
+
+  function avisoPerroSolo(segundos) {
+    const { avisoInicial, avisoMinimo, rampa } = CONFIG.perroSolo;
+    return Math.max(avisoMinimo, avisoInicial - segundos / rampa);
   }
 
   function crearEvento(estado) {
     const base = elegirEvento(estado);
     const e = { ...base, lugar: aleatorio(estado), testigo: false };
     if (e.tipo === 'perro') {
-      e.conDueno = aleatorio(estado) < 0.5;
-      e.aviso = e.conDueno ? CONFIG.avisoEvento : CONFIG.avisoPerroSolo;
+      // Se alternan suelto y con dueño para que en cada partida se vean los dos.
+      if (estado.proximoPerroConDueno === null) estado.proximoPerroConDueno = aleatorio(estado) < 0.5;
+      e.conDueno = estado.proximoPerroConDueno;
+      estado.proximoPerroConDueno = !e.conDueno;
+      e.aviso = e.conDueno ? CONFIG.avisoPerroDueno : avisoPerroSolo(estado.segundos);
     } else {
       e.aviso = CONFIG.avisoEvento;
     }
@@ -124,8 +142,9 @@
     const pendientes = [];
     for (const e of estado.eventos) {
       const viejoAhi = quieto && zonaViejo === e.zona;
-      if (e.tipo === 'perro' && !e.conDueno && trabajando && viejoAhi) {
-        // El viejo con la escoba espanta al perro suelto antes de que haga lo suyo.
+      const llego = 1 - e.aviso / e.avisoTotal >= CONFIG.perroSolo.llegada;
+      if (e.tipo === 'perro' && !e.conDueno && viejoAhi && llego) {
+        // Si el perro suelto llega y ve al viejo en la vereda, sale rajando sin hacer nada.
         estado.perrosEspantados += 1;
         estado.recienEspantados.push(e);
         continue;
@@ -160,7 +179,7 @@
     return estado;
   }
 
-  const api = { ZONAS, CONFIG, EVENTOS, crearEstado, paso, zonaActual, intervaloEventos };
+  const api = { ZONAS, CONFIG, EVENTOS, crearEstado, paso, zonaActual, intervaloEventos, avisoPerroSolo };
   if (typeof module !== 'undefined') module.exports = api;
   else root.ViejoCasaLimpia = api;
 })(globalThis);

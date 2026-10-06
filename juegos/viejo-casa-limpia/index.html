@@ -566,7 +566,9 @@
     const p = progreso(a);
     const tipo = `${a.e.tipo}-${a.e.zona}`;
     if (tipo === 'perro-vereda' && !a.e.conDueno) {
-      // Perro suelto: entra corriendo, olfatea y se agacha. Si llegás antes, se escapa.
+      // Perro suelto: ladra desde el borde, entra corriendo, olfatea y se agacha.
+      // Si al llegar ve al viejo en la vereda, se escapa.
+      const LLEGADA = V.CONFIG.perroSolo.llegada;
       const destino = posicionObjeto('vereda', a.e.lugar);
       const desdeIzquierda = (a.e.lugar * 7) % 1 < 0.5;
       const dir = desdeIzquierda ? 1 : -1;
@@ -575,24 +577,30 @@
       let mira = dir;
       let corriendo = true;
       if (a.fase === 'entrando') {
-        px = lerp(desdeIzquierda ? -40 : ANCHO + 40, llegada, suave(limitar(p / 0.4)));
-        corriendo = p < 0.4;
+        px = lerp(desdeIzquierda ? -40 : ANCHO + 40, llegada, suave(limitar(p / LLEGADA)));
+        corriendo = p < LLEGADA;
       } else if (a.fase === 'saliendo') {
         px = llegada + a.s * 120 * dir;
       } else {
         mira = -dir;
         px = llegada - a.s * 380 * dir;
       }
-      const olfatea = a.fase === 'entrando' && p >= 0.4 && p < 0.65;
-      const agachado = a.fase === 'entrando' && p >= 0.65;
+      const olfatea = a.fase === 'entrando' && p >= LLEGADA && p < 0.72;
+      const agachado = a.fase === 'entrando' && p >= 0.72;
+      const ladra = a.fase === 'entrando' && p < 0.18;
       return [{ y: destino.y, dibujar: () => {
         dibujarPerro(px, destino.y, { agachado, corriendo, dir: mira });
-        if (olfatea) {
-          ctx.fillStyle = '#333';
-          ctx.font = 'bold 14px system-ui';
-          ctx.textAlign = 'center';
-          ctx.fillText('snif', px + 24 * mira, destino.y - 38);
+        ctx.fillStyle = '#333';
+        ctx.font = 'bold 14px system-ui';
+        ctx.textAlign = 'center';
+        if (olfatea) ctx.fillText('snif', px + 24 * mira, destino.y - 38);
+        if (ladra) {
+          // Aviso antes de que se vea: ladrido en el borde por donde va a entrar.
+          ctx.font = 'bold 18px system-ui';
+          ctx.textAlign = desdeIzquierda ? 'left' : 'right';
+          ctx.fillText('¡GUAU!', desdeIzquierda ? 8 : ANCHO - 40, destino.y - 40);
         }
+        if (agachado) ctx.fillText('...', px - 10 * mira, destino.y - 30);
       } }];
     }
     if (tipo === 'perro-vereda') {
@@ -703,7 +711,7 @@
     ctx.font = '13px system-ui';
     ctx.textAlign = 'center';
     ctx.fillText('Tocá una zona para ir · mantené para trabajar', ANCHO / 2, 606);
-    ctx.fillText('Al perro suelto lo espantás si llegás antes', ANCHO / 2, 626);
+    ctx.fillText('Si oís ¡GUAU!, corré a la vereda', ANCHO / 2, 626);
   }
 
   function dibujarFin() {
