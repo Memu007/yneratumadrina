@@ -141,15 +141,16 @@ test('lo que cae queda informado solo durante ese paso', () => {
 test('antes del minuto nunca caen dos eventos seguidos en la misma zona', () => {
   for (let semilla = 1; semilla <= 30; semilla++) {
     const e = V.crearEstado(semilla);
+    const conocidos = new Set();
     let anterior = null;
     while (e.segundos < 59 && e.fase === 'jugando') {
-      const antes = e.eventos.length;
       V.paso(e, 0.05, { zona: null, trabajar: true });
       e.problemas = { casa: 0, patio: 0, vereda: 0 };
-      if (e.eventos.length > antes) {
-        const zona = e.eventos[e.eventos.length - 1].zona;
-        assert.notEqual(zona, anterior);
-        anterior = zona;
+      for (const ev of e.eventos) {
+        if (conocidos.has(ev)) continue;
+        conocidos.add(ev);
+        assert.notEqual(ev.zona, anterior);
+        anterior = ev.zona;
       }
     }
   }
@@ -202,7 +203,7 @@ test('si el viejo no está, el dueño se hace el distraído y la caca queda', ()
   assert.equal(e.objetos.vereda.length, 1);
 });
 
-test('perros sueltos y con dueño se alternan, y el suelto da tiempo de llegar desde el patio', () => {
+test('perros sueltos y con dueño se alternan, y el suelto da tiempo de llegar desde la zona de al lado', () => {
   const e = V.crearEstado(11);
   const perros = [];
   const vistos = new Set();
@@ -214,8 +215,10 @@ test('perros sueltos y con dueño se alternan, y el suelto da tiempo de llegar d
     }
   }
   for (let i = 1; i < perros.length; i++) assert.notEqual(perros[i].conDueno, perros[i - 1].conDueno);
-  const caminataDesdePatio = 2 / V.CONFIG.velocidadViejo;
-  assert.ok(V.avisoEspantable(0) > caminataDesdePatio + 0.4);
+  const unaZona = 1 / V.CONFIG.velocidadViejo;
+  const dosZonas = 2 / V.CONFIG.velocidadViejo;
+  assert.ok(V.avisoEspantable(0) > unaZona + 0.4);
+  assert.ok(V.avisoEspantable(0) < dosZonas + 0.4); // desde la otra punta no se llega: hay que elegir
   assert.ok(V.avisoEspantable(300) < V.avisoEspantable(0));
   assert.equal(V.avisoEspantable(1000), V.CONFIG.espantable.avisoMinimo);
 });
@@ -251,9 +254,7 @@ test('el pibe da el mismo margen que el perro suelto para llegar', () => {
     pibe = e.eventos.find((ev) => ev.tipo === 'pibe');
   }
   assert.ok(pibe);
-  const { avisoInicial, avisoMinimo } = V.CONFIG.espantable;
-  assert.ok(pibe.avisoTotal <= avisoInicial && pibe.avisoTotal >= avisoMinimo);
-  assert.ok(pibe.avisoTotal > V.CONFIG.avisoEvento);
+  assert.equal(pibe.avisoTotal, V.avisoEspantable(e.segundos));
 });
 
 test('si el viejo está en el patio, el vecino se esconde sin tirar la bolsa', () => {
@@ -296,4 +297,23 @@ test('si el viejo no está en la casa, los nietos embarran', () => {
   V.paso(e, 0.1, quieto);
   assert.equal(e.zapatillasAfuera, 0);
   assert.ok(e.problemas.casa >= casa + 22);
+});
+
+test('el primer evento es un perro y nunca pasan más de tres eventos sin perro', () => {
+  for (let semilla = 1; semilla <= 40; semilla++) {
+    const e = V.crearEstado(semilla);
+    const vistos = [];
+    const conocidos = new Set();
+    while (vistos.length < 30) {
+      V.paso(e, 0.05, quieto);
+      e.problemas = { patio: 0, casa: 0, vereda: 0 };
+      for (const ev of e.eventos) if (!conocidos.has(ev)) { conocidos.add(ev); vistos.push(ev.tipo); }
+    }
+    assert.equal(vistos[0], 'perro');
+    let sinPerro = 0;
+    for (const tipo of vistos) {
+      sinPerro = tipo === 'perro' ? 0 : sinPerro + 1;
+      assert.ok(sinPerro <= V.CONFIG.perroCadaMaximo, `semilla ${semilla}: ${vistos.join(',')}`);
+    }
+  }
 });

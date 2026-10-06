@@ -9,13 +9,18 @@
     deterioro: { patio: 3, casa: 2, vereda: 1.2 },
     rampa: 75, // el deterioro suma su valor base cada 75 s (crecimiento lineal)
     avisoEvento: 2,
-    // Espantables (perro suelto, pibe que tira basura): el aviso alcanza para reaccionar
-    // (~0.4 s) y caminar del patio a la vereda (2.2 s). Con el tiempo se acorta y desde el
-    // patio ya no se llega. `llegada`: fracción del aviso en que terminan de entrar.
-    espantable: { avisoInicial: 3, avisoMinimo: 2, rampa: 90, llegada: 0.35 },
+    // Lo que se frena llegando a tiempo: el aviso alcanza para reaccionar (~0.4 s) y caminar
+    // una zona (1.1 s), no dos: desde la otra punta de la casa no se llega. Con el tiempo se
+    // acorta. Ajustado con un bot que reacciona en 0.5 s: frena ~60% y dura ~47 s.
+    // `llegada`: fracción del aviso en que terminan de entrar.
+    espantable: { avisoInicial: 2.4, avisoMinimo: 1.6, rampa: 60, llegada: 0.35 },
     avisoPerroDueno: 2.5,
     unidadMugre: 8, // cada 8 puntos de problema entra un objeto tirado en la zona
-    intervaloMinimo: 2.5,
+    intervaloInicial: 4.5, // segundos entre eventos al empezar...
+    intervaloDescenso: 15, // ...que bajan 1 s cada 15 s de partida...
+    intervaloMinimo: 2, // ...hasta este piso
+    primerEvento: 3, // a los 3 s entra el primer perro: el gancho del video
+    perroCadaMaximo: 3, // nunca pasan más de 3 eventos seguidos sin un perro
     sinRepetirHasta: 60, // antes de esto, dos eventos seguidos nunca caen en la misma zona
     // El pasto alto en la primera imagen enseña qué hacer sin tutorial.
     inicio: { patio: 55, casa: 35, vereda: 20 },
@@ -46,7 +51,8 @@
       y: 1, // posición del viejo en zonas (0..2); arranca en la casa
       problemas: { ...CONFIG.inicio }, // 100 = perdiste
       eventos: [],
-      proximoEvento: 4,
+      proximoEvento: CONFIG.primerEvento,
+      eventosSinPerro: CONFIG.perroCadaMaximo - 1, // así el primero es un perro
       ultimaZonaEvento: null,
       perdioPor: null,
       perrosEspantados: 0,
@@ -73,10 +79,14 @@
   }
 
   function intervaloEventos(segundos) {
-    return Math.max(CONFIG.intervaloMinimo, 6 - segundos / 20);
+    return Math.max(CONFIG.intervaloMinimo, CONFIG.intervaloInicial - segundos / CONFIG.intervaloDescenso);
   }
 
   function elegirEvento(estado) {
+    // El perro es la estrella: si hace mucho que no viene, viene (salvo que repita zona temprano).
+    const perro = EVENTOS.find((e) => e.tipo === 'perro');
+    const perroPermitido = estado.segundos >= CONFIG.sinRepetirHasta || estado.ultimaZonaEvento !== perro.zona;
+    if (estado.eventosSinPerro >= CONFIG.perroCadaMaximo - 1 && perroPermitido) return perro;
     const candidatos =
       estado.segundos < CONFIG.sinRepetirHasta
         ? EVENTOS.filter((e) => e.zona !== estado.ultimaZonaEvento)
@@ -142,6 +152,7 @@
     estado.proximoEvento -= dt;
     if (estado.proximoEvento <= 0) {
       const e = crearEvento(estado);
+      estado.eventosSinPerro = e.tipo === 'perro' ? 0 : estado.eventosSinPerro + 1;
       estado.eventos.push(e);
       estado.ultimaZonaEvento = e.zona;
       estado.proximoEvento = intervaloEventos(estado.segundos);
