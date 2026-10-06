@@ -77,5 +77,69 @@ test('aparecen eventos, se acelera y es reproducible con la misma semilla', () =
   assert.deepEqual(a, b);
   assert.ok(vistos > 0);
   assert.ok(V.intervaloEventos(300) < V.intervaloEventos(0));
-  assert.ok(V.intervaloEventos(1000) >= 1.5);
+  assert.equal(V.intervaloEventos(1000), V.CONFIG.intervaloMinimo);
+});
+
+test('arranca con el pasto alto para que se entienda qué hacer', () => {
+  const e = V.crearEstado(3);
+  assert.ok(e.problemas.jardin > e.problemas.casa && e.problemas.jardin > e.problemas.vereda);
+});
+
+test('el viejo trabajando en la vereda espanta al perro antes de que cague', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 99;
+  e.y = 2;
+  e.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, aviso: 1 }];
+  V.paso(e, 0.1, { zona: null, trabajar: true });
+  assert.equal(e.eventos.length, 0);
+  assert.equal(e.perrosEspantados, 1);
+  assert.equal(e.recienEspantados.length, 1);
+  assert.equal(e.recienCaidos.length, 0);
+});
+
+test('al vecino no se lo espanta, y al perro tampoco si el viejo no trabaja', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 99;
+  e.y = 2;
+  e.eventos = [
+    { tipo: 'vecino', zona: 'vereda', suma: 18, aviso: 1 },
+    { tipo: 'perro', zona: 'vereda', suma: 25, aviso: 1 },
+  ];
+  V.paso(e, 0.1, { zona: null, trabajar: true });
+  assert.equal(e.eventos.length, 1);
+  assert.equal(e.eventos[0].tipo, 'vecino');
+
+  const f = V.crearEstado(3);
+  f.proximoEvento = 99;
+  f.y = 2;
+  f.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, aviso: 1 }];
+  V.paso(f, 0.1, quieto);
+  assert.equal(f.eventos.length, 1);
+});
+
+test('lo que cae queda informado solo durante ese paso', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 99;
+  e.eventos = [{ tipo: 'nietos', zona: 'casa', suma: 22, aviso: 0.05 }];
+  V.paso(e, 0.1, quieto);
+  assert.equal(e.recienCaidos.length, 1);
+  V.paso(e, 0.1, quieto);
+  assert.equal(e.recienCaidos.length, 0);
+});
+
+test('antes del minuto nunca caen dos eventos seguidos en la misma zona', () => {
+  for (let semilla = 1; semilla <= 30; semilla++) {
+    const e = V.crearEstado(semilla);
+    let anterior = null;
+    while (e.segundos < 59 && e.fase === 'jugando') {
+      const antes = e.eventos.length;
+      V.paso(e, 0.05, { zona: null, trabajar: true });
+      e.problemas = { casa: 0, jardin: 0, vereda: 0 };
+      if (e.eventos.length > antes) {
+        const zona = e.eventos[e.eventos.length - 1].zona;
+        assert.notEqual(zona, anterior);
+        anterior = zona;
+      }
+    }
+  }
 });

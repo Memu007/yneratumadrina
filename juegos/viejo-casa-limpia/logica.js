@@ -7,8 +7,12 @@
     velocidadTrabajo: 30, // problema quitado por segundo
     // Cuánto empeora cada zona por segundo al comienzo.
     deterioro: { casa: 2, jardin: 3, vereda: 1.2 },
-    rampa: 90, // cada 90 s el deterioro se duplica
-    avisoEvento: 1.5,
+    rampa: 75, // el deterioro suma su valor base cada 75 s (crecimiento lineal)
+    avisoEvento: 2,
+    intervaloMinimo: 2.5,
+    sinRepetirHasta: 60, // antes de esto, dos eventos seguidos nunca caen en la misma zona
+    // El pasto alto en la primera imagen enseña qué hacer sin tutorial.
+    inicio: { casa: 35, jardin: 55, vereda: 20 },
   };
   const EVENTOS = [
     { tipo: 'perro', zona: 'vereda', suma: 25 },
@@ -32,10 +36,15 @@
       fase: 'jugando',
       segundos: 0,
       y: 1, // posición del viejo en zonas (0..2)
-      problemas: { casa: 20, jardin: 20, vereda: 20 }, // 100 = perdiste
+      problemas: { ...CONFIG.inicio }, // 100 = perdiste
       eventos: [],
       proximoEvento: 4,
+      ultimaZonaEvento: null,
       perdioPor: null,
+      perrosEspantados: 0,
+      // Lo ocurrido en el último paso, para que la pantalla reaccione (sonido, sacudón).
+      recienCaidos: [],
+      recienEspantados: [],
     };
   }
 
@@ -48,11 +57,21 @@
   }
 
   function intervaloEventos(segundos) {
-    return Math.max(1.5, 6 - segundos / 20);
+    return Math.max(CONFIG.intervaloMinimo, 6 - segundos / 20);
+  }
+
+  function elegirEvento(estado) {
+    const candidatos =
+      estado.segundos < CONFIG.sinRepetirHasta
+        ? EVENTOS.filter((e) => e.zona !== estado.ultimaZonaEvento)
+        : EVENTOS;
+    return candidatos[Math.floor(aleatorio(estado) * candidatos.length)];
   }
 
   // entrada: { zona: 0..2 | null, trabajar: boolean }
   function paso(estado, dt, entrada) {
+    estado.recienCaidos = [];
+    estado.recienEspantados = [];
     if (estado.fase !== 'jugando') return estado;
     estado.segundos += dt;
 
@@ -69,23 +88,35 @@
     }
 
     const quieto = Math.abs(estado.y - zonaActual(estado)) < 0.05;
-    if (entrada.trabajar && quieto) {
-      const zona = ZONAS[zonaActual(estado)];
-      estado.problemas[zona] -= CONFIG.velocidadTrabajo * dt;
+    const trabajando = entrada.trabajar && quieto;
+    const zonaViejo = ZONAS[zonaActual(estado)];
+    if (trabajando) {
+      estado.problemas[zonaViejo] -= CONFIG.velocidadTrabajo * dt;
     }
 
     estado.proximoEvento -= dt;
     if (estado.proximoEvento <= 0) {
-      const e = EVENTOS[Math.floor(aleatorio(estado) * EVENTOS.length)];
+      const e = elegirEvento(estado);
       estado.eventos.push({ ...e, aviso: CONFIG.avisoEvento });
+      estado.ultimaZonaEvento = e.zona;
       estado.proximoEvento = intervaloEventos(estado.segundos);
     }
 
     const pendientes = [];
     for (const e of estado.eventos) {
+      if (e.tipo === 'perro' && trabajando && zonaViejo === e.zona) {
+        // El viejo en la vereda con la escoba espanta al perro antes de que haga lo suyo.
+        estado.perrosEspantados += 1;
+        estado.recienEspantados.push(e);
+        continue;
+      }
       e.aviso -= dt;
-      if (e.aviso <= 0) estado.problemas[e.zona] += e.suma;
-      else pendientes.push(e);
+      if (e.aviso <= 0) {
+        estado.problemas[e.zona] += e.suma;
+        estado.recienCaidos.push(e);
+      } else {
+        pendientes.push(e);
+      }
     }
     estado.eventos = pendientes;
 

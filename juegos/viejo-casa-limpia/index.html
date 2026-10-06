@@ -22,17 +22,112 @@
   const ctx = Lienzo.crearLienzo(canvas);
 
   const ALTO_ZONA = 170;
-  const FONDOS = { casa: '#f3e3c7', jardin: '#8fd16a', vereda: '#b9b9b9' };
+  const X_VIEJO = 130;
   const NOMBRES = { casa: 'Casa', jardin: 'Pasto', vereda: 'Vereda' };
-  const CAUSAS = { casa: '¡La casa es un chiquero!', jardin: '¡El pasto te tapó!', vereda: '¡La vereda da vergüenza!' };
-  const AVISOS = { perro: '🐕', vecino: '🙋', nietos: '👦' };
-  const HERRAMIENTAS = { casa: '🧹', jardin: '✂️', vereda: '🧹' };
+  const CAUSAS = {
+    casa: 'Los nietos te ganaron la casa.',
+    jardin: 'El pasto te tapó.',
+    vereda: 'La vereda da vergüenza.',
+  };
+  const REINTENTAR = {
+    casa: '¿Vas a dejar que ganen los nietos?',
+    jardin: '¿Vas a dejar que gane el pasto?',
+    vereda: '¿Vas a dejar que gane el perro?',
+  };
+  const FRASES_EVENTO = {
+    perro: ['¡Otra vez el perro de la vecina!', 'Me van a matar a disgustos.'],
+    vecino: ['A ver si pasan menos y ensucian menos.', 'Esto antes no pasaba.'],
+    nietos: ['Nietos, sí. Chiqueros, no.', 'Me van a matar a disgustos.'],
+  };
+  const FRASES_SUELTAS = [
+    'Yo a tu edad ya tenía la vereda baldeada.',
+    '¿Quién va a cortar esto? ¿El Papa?',
+    'Mirá cómo está el pasto, parece Misiones.',
+    'Me duele la cadera, no la dignidad.',
+    'Vamos, viejo, que la casa no se limpia sola.',
+  ];
+  const FRASES_ESPANTAR = ['¡Fuera de acá!', '¡Ni se te ocurra!', '¡Andá a cagar a otro lado!'];
+
   const entrada = { zona: null, trabajar: false };
   let estado = V.crearEstado(Date.now());
   let record = Lienzo.leerRecord(CLAVE_RECORD);
+  let reloj = 0; // tiempo de pantalla, para animaciones
+  let sacudon = 0;
+  let particulas = [];
+  let perrosHuyendo = [];
+  let globo = null; // { texto, hasta }
+  let proximaFraseSuelta = 8;
+  let zonaQuieta = 1; // última zona donde el viejo estuvo parado
+  let finDesde = 0;
+  let proximoSonidoTrabajo = 0;
 
+  // ---------- Sonido (WebAudio, sin archivos) ----------
+  let audio = null;
+  function activarAudio() {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state === 'suspended') audio.resume();
+    } catch {
+      audio = null;
+    }
+  }
+  function tono(tipo, desde, hasta, dur, volumen) {
+    if (!audio) return;
+    const t = audio.currentTime;
+    const osc = audio.createOscillator();
+    const g = audio.createGain();
+    osc.type = tipo;
+    osc.frequency.setValueAtTime(desde, t);
+    osc.frequency.exponentialRampToValueAtTime(hasta, t + dur);
+    g.gain.setValueAtTime(volumen, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(g).connect(audio.destination);
+    osc.start(t);
+    osc.stop(t + dur);
+  }
+  function ruido(dur, frecuencia, volumen) {
+    if (!audio) return;
+    const t = audio.currentTime;
+    const buffer = audio.createBuffer(1, Math.floor(audio.sampleRate * dur), audio.sampleRate);
+    const datos = buffer.getChannelData(0);
+    for (let i = 0; i < datos.length; i++) datos[i] = Math.random() * 2 - 1;
+    const fuente = audio.createBufferSource();
+    const filtro = audio.createBiquadFilter();
+    const g = audio.createGain();
+    fuente.buffer = buffer;
+    filtro.type = 'bandpass';
+    filtro.frequency.value = frecuencia;
+    g.gain.setValueAtTime(volumen, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    fuente.connect(filtro).connect(g).connect(audio.destination);
+    fuente.start(t);
+  }
+  const SONIDOS = {
+    barrer: () => ruido(0.16, 1400, 0.25),
+    cortar: () => { tono('square', 2400, 1800, 0.04, 0.06); setTimeout(() => tono('square', 2600, 1900, 0.04, 0.06), 70); },
+    plop: () => tono('sine', 320, 70, 0.22, 0.5),
+    fuera: () => { tono('square', 520, 760, 0.1, 0.08); setTimeout(() => tono('square', 760, 520, 0.12, 0.08), 110); },
+    perder: () => tono('triangle', 440, 90, 0.9, 0.3),
+  };
+  function vibrar(ms) {
+    try { navigator.vibrate && navigator.vibrate(ms); } catch { /* sin vibración */ }
+  }
+
+  // ---------- Entrada ----------
+  function reiniciar() {
+    estado = V.crearEstado(Date.now());
+    particulas = [];
+    perrosHuyendo = [];
+    globo = null;
+    zonaQuieta = 1;
+    proximaFraseSuelta = 8;
+  }
   canvas.addEventListener('pointerdown', (e) => {
-    if (estado.fase === 'fin') { estado = V.crearEstado(Date.now()); return; }
+    activarAudio();
+    if (estado.fase === 'fin') {
+      if (reloj - finDesde > 0.8) reiniciar();
+      return;
+    }
     entrada.zona = Math.min(2, Math.floor(Lienzo.puntoLogico(canvas, e).y / ALTO_ZONA));
     entrada.trabajar = true;
   });
@@ -41,122 +136,401 @@
   }
   const TECLAS_ZONA = { ArrowUp: -1, ArrowDown: 1 };
   window.addEventListener('keydown', (e) => {
-    if (estado.fase === 'fin' && e.key === ' ') { estado = V.crearEstado(Date.now()); return; }
+    activarAudio();
+    if (estado.fase === 'fin') {
+      if (e.key === ' ' && reloj - finDesde > 0.8) reiniciar();
+      return;
+    }
     if (e.key in TECLAS_ZONA) entrada.zona = V.zonaActual(estado) + TECLAS_ZONA[e.key];
     if (e.key === ' ') entrada.trabajar = true;
   });
   window.addEventListener('keyup', (e) => { if (e.key === ' ') entrada.trabajar = false; });
 
-  // Posiciones fijas de manchas para que no titilen cada cuadro.
-  const MANCHAS = Array.from({ length: 12 }, (_, i) => ({ x: 30 + ((i * 97) % 250), y: 40 + ((i * 53) % 110) }));
+  // ---------- Dibujos ----------
+  const azar = (lista) => lista[Math.floor(Math.random() * lista.length)];
+  // Posiciones fijas para la mugre, así no titila cada cuadro.
+  const MANCHAS = Array.from({ length: 12 }, (_, i) => ({ x: 200 + ((i * 47) % 110), y: 60 + ((i * 53) % 90) }));
+
+  function circulo(x, y, r, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  function linea(x1, y1, x2, y2, ancho, color) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = ancho;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  // El viejo: calvo con mechones, cejas y bigote blancos, lentes, musculosa y pantuflas.
+  function dibujarViejo(x, y, { caminando, trabajando, triste, herramienta }) {
+    const PIEL = '#f1c6a0';
+    const BLANCO = '#f7f7f2';
+    const paso = caminando ? Math.sin(reloj * Math.PI * 4) * 6 : 0;
+    const bamboleo = trabajando ? Math.sin(reloj * 30) * 3 : 0;
+    ctx.save();
+    ctx.translate(x, y + bamboleo);
+    // Piernas y pantuflas
+    linea(-6, -30, -6 + paso, -4, 6, PIEL);
+    linea(6, -30, 6 - paso, -4, 6, PIEL);
+    ctx.fillStyle = '#7a4a2a';
+    ctx.beginPath(); ctx.ellipse(-7 + paso, -2, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(7 - paso, -2, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
+    // Encorvado
+    ctx.rotate(0.17);
+    ctx.fillStyle = '#6b4b2f';
+    ctx.fillRect(-13, -40, 26, 13); // pantalón corto
+    ctx.fillStyle = BLANCO;
+    ctx.beginPath(); ctx.roundRect(-14, -68, 28, 32, 6); ctx.fill(); // musculosa
+    // Brazos
+    if (triste) {
+      linea(-13, -62, -20, -46, 5, PIEL); linea(-20, -46, -12, -40, 5, PIEL);
+      linea(13, -62, 20, -46, 5, PIEL); linea(20, -46, 12, -40, 5, PIEL);
+    } else {
+      linea(-13, -62, -18, -40, 5, PIEL);
+      linea(13, -62, 26, -48, 5, PIEL);
+    }
+    if (herramienta && trabajando) dibujarHerramienta(herramienta, 26, -48);
+    // Cabeza
+    circulo(0, -82, 14, PIEL);
+    ctx.strokeStyle = BLANCO;
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(0, -82, 13, Math.PI * 0.75, Math.PI * 1.05); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, -82, 13, Math.PI * 1.95, Math.PI * 0.25); ctx.stroke();
+    // Cejas caídas hacia afuera: cara de malhumor
+    linea(-10, -90, -3, triste ? -91 : -88, 3, BLANCO);
+    linea(3, triste ? -91 : -88, 10, -90, 3, BLANCO);
+    // Lentes
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(-5, -84, 4, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(5, -84, 4, 0, Math.PI * 2); ctx.stroke();
+    // Bigote y boca
+    ctx.fillStyle = BLANCO;
+    ctx.beginPath(); ctx.ellipse(0, -76, 8, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    if (triste) {
+      ctx.strokeStyle = '#7a3b2a';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, -69, 4, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function dibujarHerramienta(tipo, x, y) {
+    if (tipo === 'jardin') {
+      // Tijera de podar: dos hojas que se abren y cierran
+      const apertura = Math.abs(Math.sin(reloj * 14)) * 0.5;
+      linea(x, y, x + 14, y - 4, 4, '#c0392b');
+      linea(x + 14, y - 4, x + 32, y - 10 - apertura * 14, 3, '#aaa');
+      linea(x + 14, y - 4, x + 32, y - 2 + apertura * 14, 3, '#aaa');
+    } else {
+      // Escoba
+      linea(x - 6, y - 30, x + 10, y + 30, 3, '#a0743f');
+      ctx.fillStyle = '#d9b44a';
+      ctx.save();
+      ctx.translate(x + 12, y + 34);
+      ctx.rotate(-0.3);
+      ctx.fillRect(-10, 0, 20, 10);
+      ctx.restore();
+    }
+  }
+
+  function dibujarPerro(x, y, agachado) {
+    const MARRON = '#8b5a2b';
+    const pata = agachado ? 0 : Math.sin(reloj * 20) * 4;
+    ctx.save();
+    ctx.translate(x, y);
+    linea(-12, -8, -12 + pata, 4, 4, MARRON);
+    linea(10, -8, 10 - pata, 4, 4, MARRON);
+    ctx.fillStyle = MARRON;
+    ctx.beginPath(); ctx.ellipse(0, agachado ? -8 : -12, 18, 9, 0, 0, Math.PI * 2); ctx.fill();
+    circulo(20, -22, 8, MARRON);
+    ctx.fillStyle = '#5a3418';
+    ctx.beginPath(); ctx.ellipse(16, -24, 3, 7, 0.4, 0, Math.PI * 2); ctx.fill();
+    circulo(24, -24, 1.5, '#111');
+    linea(-17, -14, -26, -24 + Math.sin(reloj * 18) * 4, 3, MARRON); // cola
+    ctx.restore();
+  }
+
+  function dibujarPersona(x, y, { pelo, remera, chico, correr }) {
+    const escala = chico ? 0.7 : 1;
+    const paso = correr ? Math.sin(reloj * 22) * 7 : 0;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(escala, escala);
+    linea(-5, -30, -5 + paso, 0, 6, '#33475b');
+    linea(5, -30, 5 - paso, 0, 6, '#33475b');
+    ctx.fillStyle = remera;
+    ctx.beginPath(); ctx.roundRect(-12, -62, 24, 34, 6); ctx.fill();
+    circulo(0, -74, 12, '#e8b48a');
+    ctx.fillStyle = pelo;
+    ctx.beginPath(); ctx.arc(0, -77, 12, Math.PI, 0); ctx.fill();
+    ctx.restore();
+  }
+
+  function dibujarCaca(x, y) {
+    circulo(x, y, 7, '#6b3e1e');
+    circulo(x, y - 6, 5, '#7a4824');
+    circulo(x, y - 11, 3, '#8b5a2b');
+  }
+  function dibujarBasura(x, y) {
+    ctx.fillStyle = '#fafafa';
+    ctx.fillRect(x - 5, y - 12, 10, 12);
+    ctx.fillStyle = '#d63031';
+    ctx.fillRect(x - 5, y - 12, 10, 3);
+  }
 
   function dibujarZona(zona, i) {
     const y0 = i * ALTO_ZONA;
     const nivel = estado.problemas[zona];
-    ctx.fillStyle = FONDOS[zona];
-    ctx.fillRect(0, y0, ANCHO, ALTO_ZONA);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
     if (zona === 'casa') {
-      ctx.font = '40px serif';
-      ctx.fillText('🏠', 300, y0 + 40);
-      const manchas = Math.round((nivel / 100) * MANCHAS.length);
-      ctx.fillStyle = 'rgba(90, 60, 30, 0.55)';
-      for (const m of MANCHAS.slice(0, manchas)) {
-        ctx.beginPath();
-        ctx.arc(m.x, y0 + m.y, 12, 0, Math.PI * 2);
-        ctx.fill();
+      ctx.fillStyle = '#f6e7cf';
+      ctx.fillRect(0, y0, ANCHO, ALTO_ZONA * 0.55);
+      ctx.fillStyle = '#d9b98f';
+      ctx.fillRect(0, y0 + ALTO_ZONA * 0.55, ANCHO, ALTO_ZONA * 0.45);
+      ctx.fillStyle = '#9ec9e8';
+      ctx.fillRect(220, y0 + 22, 60, 48); // ventana
+      linea(250, y0 + 22, 250, y0 + 70, 3, '#fff');
+      const barro = Math.round((nivel / 100) * MANCHAS.length);
+      for (const m of MANCHAS.slice(0, barro)) {
+        ctx.fillStyle = 'rgba(92, 60, 30, 0.7)';
+        ctx.beginPath(); ctx.ellipse(m.x - 140, y0 + 100 + (m.y % 60), 10, 5, 0, 0, Math.PI * 2); ctx.fill();
       }
     } else if (zona === 'jardin') {
-      const alto = 10 + (nivel / 100) * 140;
+      ctx.fillStyle = '#8fd16a';
+      ctx.fillRect(0, y0, ANCHO, ALTO_ZONA);
+      const alto = 8 + (nivel / 100) * 150;
       ctx.strokeStyle = '#2f7d1f';
       ctx.lineWidth = 3;
       ctx.beginPath();
-      for (let x = 6; x < ANCHO; x += 9) {
+      for (let x = 4; x < ANCHO; x += 8) {
         ctx.moveTo(x, y0 + ALTO_ZONA);
-        ctx.lineTo(x + Math.sin(x + performance.now() / 600) * 4, y0 + ALTO_ZONA - alto * (0.8 + ((x * 7) % 5) / 20));
+        ctx.lineTo(x + Math.sin(x + reloj * 1.5) * 4, y0 + ALTO_ZONA - alto * (0.8 + ((x * 7) % 5) / 20));
       }
       ctx.stroke();
     } else {
-      const basuras = Math.round((nivel / 100) * MANCHAS.length);
-      ctx.font = '24px serif';
-      MANCHAS.slice(0, basuras).forEach((m, k) => ctx.fillText(k % 3 === 0 ? '💩' : '🥤', m.x, y0 + m.y));
+      ctx.fillStyle = '#c4c4c4';
+      ctx.fillRect(0, y0, ANCHO, ALTO_ZONA);
+      ctx.strokeStyle = '#aaa';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < ANCHO; x += 40) { ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + ALTO_ZONA - 20); ctx.stroke(); }
+      ctx.fillStyle = '#888';
+      ctx.fillRect(0, y0 + ALTO_ZONA - 20, ANCHO, 20); // cordón
+      const mugre = Math.round((nivel / 100) * MANCHAS.length);
+      MANCHAS.slice(0, mugre).forEach((m, k) => (k % 3 === 0 ? dibujarCaca : dibujarBasura)(m.x - 20, y0 + 40 + (m.y % 100)));
     }
 
-    // Barra de peligro de la zona.
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(ANCHO - 26, y0 + 12, 14, ALTO_ZONA - 24);
-    ctx.fillStyle = nivel > 75 ? '#e02020' : nivel > 50 ? '#f0a000' : '#2a9d3a';
-    const h = ((ALTO_ZONA - 24) * nivel) / 100;
-    ctx.fillRect(ANCHO - 26, y0 + ALTO_ZONA - 12 - h, 14, h);
-    ctx.fillStyle = '#222';
+    // La zona se pone roja cuando se complica, y late cuando ya casi perdés.
+    if (nivel > 50) {
+      const latido = nivel > 75 ? 0.5 + 0.5 * Math.sin(reloj * 10) : 1;
+      ctx.fillStyle = `rgba(230, 30, 30, ${((nivel - 50) / 50) * 0.35 * latido})`;
+      ctx.fillRect(0, y0, ANCHO, ALTO_ZONA);
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.font = 'bold 16px system-ui';
     ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
     ctx.fillText(NOMBRES[zona], 10, y0 + 16);
   }
 
+  function dibujarBarra(zona, i) {
+    const y0 = i * ALTO_ZONA;
+    const nivel = estado.problemas[zona];
+    const caminando = Math.abs(estado.y - V.zonaActual(estado)) >= 0.05;
+    // Mientras el viejo camina, la zona que abandonó parpadea.
+    if (caminando && i === zonaQuieta && Math.floor(reloj * 6) % 2 === 0) return;
+    const x = ANCHO - 34;
+    const altoBarra = ALTO_ZONA - 56;
+    const color = nivel > 75 ? '#e02020' : nivel > 50 ? '#f0a000' : '#2a9d3a';
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(x, y0 + 44, 22, altoBarra);
+    ctx.fillStyle = color;
+    const h = (altoBarra * nivel) / 100;
+    ctx.fillRect(x, y0 + 44 + altoBarra - h, 22, h);
+    // Carita de estado arriba de la barra
+    circulo(x + 11, y0 + 28, 12, color);
+    circulo(x + 7, y0 + 25, 1.8, '#111');
+    circulo(x + 15, y0 + 25, 1.8, '#111');
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    if (nivel > 75) ctx.arc(x + 11, y0 + 37, 5, Math.PI * 1.15, Math.PI * 1.85);
+    else if (nivel > 50) { ctx.moveTo(x + 6, y0 + 33); ctx.lineTo(x + 16, y0 + 33); }
+    else ctx.arc(x + 11, y0 + 29, 5, Math.PI * 0.15, Math.PI * 0.85);
+    ctx.stroke();
+  }
+
   function dibujarEventos() {
-    ctx.font = '36px serif';
-    ctx.textAlign = 'center';
     for (const e of estado.eventos) {
       const i = V.ZONAS.indexOf(e.zona);
-      // El visitante cruza la zona mientras dura el aviso.
+      const suelo = i * ALTO_ZONA + ALTO_ZONA - 28;
       const avance = 1 - e.aviso / V.CONFIG.avisoEvento;
-      ctx.fillText(AVISOS[e.tipo], 20 + avance * (ANCHO - 80), i * ALTO_ZONA + ALTO_ZONA / 2);
+      if (e.tipo === 'perro') {
+        dibujarPerro(-30 + Math.min(1, avance / 0.7) * 280, suelo, avance > 0.7);
+      } else if (e.tipo === 'nietos') {
+        dibujarPersona(ANCHO + 20 - avance * (ANCHO + 40), suelo, { pelo: '#5a3418', remera: '#e74c3c', chico: true, correr: true });
+      } else {
+        // El vecino asoma desde la derecha y revolea la bolsa.
+        dibujarPersona(ANCHO - 60, suelo, { pelo: '#999', remera: '#2e86de' });
+        const bx = ANCHO - 60 - avance * 140;
+        const by = suelo - 70 - Math.sin(avance * Math.PI) * 50 + avance * 60;
+        ctx.fillStyle = '#222';
+        ctx.beginPath(); ctx.arc(bx, by, 9, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    for (const p of perrosHuyendo) {
+      dibujarPerro(p.x, p.y, false);
     }
   }
 
-  function dibujarViejo() {
-    const cy = estado.y * ALTO_ZONA + ALTO_ZONA / 2;
-    const zona = V.ZONAS[V.zonaActual(estado)];
-    const trabajando = entrada.trabajar && Math.abs(estado.y - V.zonaActual(estado)) < 0.05;
-    const bamboleo = trabajando ? Math.sin(performance.now() / 70) * 8 : 0;
-    ctx.font = '54px serif';
-    ctx.textAlign = 'center';
+  function dibujarGlobo(x, y, texto) {
+    ctx.font = 'bold 14px system-ui';
+    const ancho = Math.min(ANCHO - 20, ctx.measureText(texto).width + 20);
+    const bx = Math.max(10, Math.min(ANCHO - ancho - 10, x - 30));
+    const by = Math.max(6, y - 40);
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(bx, by, ancho, 30, 10); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#222';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText('👴', 140, cy);
-    if (trabajando) {
-      ctx.font = '32px serif';
-      ctx.fillText(HERRAMIENTAS[zona], 180 + bamboleo, cy + 14);
-    }
+    ctx.fillText(texto, bx + 10, by + 15, ancho - 20);
   }
 
   function dibujarHud() {
     ctx.fillStyle = '#222';
     ctx.fillRect(0, 3 * ALTO_ZONA, ANCHO, ALTO - 3 * ALTO_ZONA);
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 22px system-ui';
+    ctx.font = 'bold 26px system-ui';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`⏱ ${Math.floor(estado.segundos)}s`, 16, ALTO - 90);
+    ctx.fillText(`${Math.floor(estado.segundos)}s`, 16, ALTO - 84);
+    ctx.font = 'bold 18px system-ui';
     ctx.textAlign = 'right';
-    ctx.fillText(`Récord ${record}s`, ANCHO - 16, ALTO - 90);
+    ctx.fillText(`Récord ${record}s`, ANCHO - 16, ALTO - 84);
     ctx.fillStyle = '#aaa';
     ctx.font = '13px system-ui';
     ctx.textAlign = 'center';
-    ctx.fillText('Tocá una zona para ir · mantené para trabajar', ANCHO / 2, ALTO - 40);
-    ctx.fillText('Que nada llegue al rojo', ANCHO / 2, ALTO - 20);
+    ctx.fillText('Tocá una zona para ir · mantené para trabajar', ANCHO / 2, ALTO - 44);
+    ctx.fillText('Si estás barriendo la vereda, el perro no se anima', ANCHO / 2, ALTO - 22);
   }
 
   function dibujarFin() {
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillStyle = 'rgba(20,20,20,0.88)';
     ctx.fillRect(0, 0, ANCHO, ALTO);
-    Lienzo.textoCentrado(ctx, CAUSAS[estado.perdioPor], 230, 26, '#fff');
-    Lienzo.textoCentrado(ctx, `Aguantaste ${Math.floor(estado.segundos)} segundos`, 280, 22, '#ffd34d');
-    Lienzo.textoCentrado(ctx, `Récord: ${record}s`, 315, 18, '#ccc');
-    Lienzo.textoCentrado(ctx, 'Tocá para jugar de nuevo', 400, 18, '#fff');
+    dibujarViejo(ANCHO / 2, 170, { triste: true });
+    Lienzo.textoCentrado(ctx, 'Se te vino la noche, abuelo.', 215, 22, '#fff');
+    Lienzo.textoCentrado(ctx, CAUSAS[estado.perdioPor], 245, 16, '#ccc');
+    Lienzo.textoCentrado(ctx, `${Math.floor(estado.segundos)}s`, 310, 64, '#ffd34d');
+    const nuevo = Math.floor(estado.segundos) >= record;
+    Lienzo.textoCentrado(ctx, nuevo ? '¡Nuevo récord!' : `Tu récord: ${record}s`, 365, 18, nuevo ? '#7bed9f' : '#ccc');
+    if (estado.perrosEspantados > 0) {
+      Lienzo.textoCentrado(ctx, `Perros espantados: ${estado.perrosEspantados}`, 392, 15, '#ccc');
+    }
+    ctx.fillStyle = '#ffd34d';
+    ctx.beginPath(); ctx.roundRect(30, 440, ANCHO - 60, 56, 14); ctx.fill();
+    Lienzo.textoCentrado(ctx, REINTENTAR[estado.perdioPor], 468, 15, '#222');
+    Lienzo.textoCentrado(ctx, 'INERA SARA', ALTO - 30, 14, '#777');
+  }
+
+  // ---------- Reacciones y partículas ----------
+  function decir(texto, segundos) {
+    globo = { texto, hasta: reloj + (segundos || 2.4) };
+  }
+
+  function reaccionar(dt) {
+    const caminando = Math.abs(estado.y - V.zonaActual(estado)) >= 0.05;
+    if (!caminando) zonaQuieta = V.zonaActual(estado);
+    const trabajando = entrada.trabajar && !caminando && estado.fase === 'jugando';
+
+    for (const e of estado.recienCaidos) {
+      sacudon = 0.25;
+      SONIDOS.plop();
+      vibrar(30);
+      decir(azar(FRASES_EVENTO[e.tipo]));
+    }
+    for (const e of estado.recienEspantados) {
+      SONIDOS.fuera();
+      decir(azar(FRASES_ESPANTAR));
+      perrosHuyendo.push({ x: 200, y: V.ZONAS.indexOf(e.zona) * ALTO_ZONA + ALTO_ZONA - 28, vida: 1.2 });
+    }
+    perrosHuyendo = perrosHuyendo.filter((p) => (p.vida -= dt) > 0);
+    for (const p of perrosHuyendo) p.x -= 360 * dt;
+
+    if (trabajando) {
+      const zona = V.ZONAS[V.zonaActual(estado)];
+      const yViejo = V.zonaActual(estado) * ALTO_ZONA + ALTO_ZONA - 28;
+      if (reloj >= proximoSonidoTrabajo) {
+        (zona === 'jardin' ? SONIDOS.cortar : SONIDOS.barrer)();
+        proximoSonidoTrabajo = reloj + 0.28;
+      }
+      for (let k = 0; k < 2; k++) {
+        particulas.push({
+          x: X_VIEJO + 40 + Math.random() * 20,
+          y: yViejo - (zona === 'jardin' ? 30 : 4),
+          vx: 40 + Math.random() * 120,
+          vy: -60 - Math.random() * 90,
+          vida: 0.6,
+          color: zona === 'jardin' ? '#3a9a2a' : '#c8a878',
+        });
+      }
+    }
+    particulas = particulas.filter((p) => (p.vida -= dt) > 0);
+    for (const p of particulas) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 300 * dt;
+    }
+
+    if (caminando && !globo) decir('Ufff...', 0.8);
+    proximaFraseSuelta -= dt;
+    if (proximaFraseSuelta <= 0) {
+      if (!globo) decir(azar(FRASES_SUELTAS), 2.8);
+      proximaFraseSuelta = 9 + Math.random() * 5;
+    }
+    if (globo && reloj > globo.hasta) globo = null;
+    sacudon = Math.max(0, sacudon - dt);
   }
 
   Lienzo.bucle((dt) => {
+    reloj += dt;
     const estabaJugando = estado.fase === 'jugando';
     V.paso(estado, dt, entrada);
     if (estabaJugando && estado.fase === 'fin') {
       record = Lienzo.guardarRecord(CLAVE_RECORD, Math.floor(estado.segundos));
+      finDesde = reloj;
+      SONIDOS.perder();
+      vibrar(200);
+    }
+    reaccionar(dt);
+
+    ctx.save();
+    if (sacudon > 0) {
+      const fuerza = (sacudon / 0.25) * 7;
+      ctx.translate((Math.random() - 0.5) * fuerza, (Math.random() - 0.5) * fuerza);
     }
     V.ZONAS.forEach(dibujarZona);
     dibujarEventos();
-    dibujarViejo();
+    const caminando = Math.abs(estado.y - V.zonaActual(estado)) >= 0.05;
+    const yViejo = estado.y * ALTO_ZONA + ALTO_ZONA - 28;
+    dibujarViejo(X_VIEJO, yViejo, {
+      caminando,
+      trabajando: entrada.trabajar && !caminando,
+      herramienta: V.ZONAS[V.zonaActual(estado)],
+    });
+    for (const p of particulas) {
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x, p.y, 4, 4);
+    }
+    V.ZONAS.forEach(dibujarBarra);
+    if (globo) dibujarGlobo(X_VIEJO, yViejo - 100, globo.texto);
+    ctx.restore();
     dibujarHud();
     if (estado.fase === 'fin') dibujarFin();
   });
