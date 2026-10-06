@@ -49,12 +49,14 @@
       ultimaZonaEvento: null,
       perdioPor: null,
       perrosEspantados: 0,
+      cacasLevantadas: 0, // las que levantó el dueño porque lo vio el viejo
       proximoPerroConDueno: null, // se sortea con el primer perro y después se alterna
       objetos: { patio: [], casa: [], vereda: [] }, // lo que quedó tirado, del más viejo al más nuevo
       // Lo ocurrido en el último paso, para que la pantalla reaccione (sonido, sacudón).
       recienCaidos: [],
       recienEspantados: [],
       recienPuteadas: [],
+      recienLevantadas: [],
     };
   }
 
@@ -109,6 +111,7 @@
     estado.recienCaidos = [];
     estado.recienEspantados = [];
     estado.recienPuteadas = [];
+    estado.recienLevantadas = [];
     if (estado.fase !== 'jugando') return estado;
     estado.segundos += dt;
 
@@ -150,12 +153,16 @@
         continue;
       }
       if (e.tipo === 'perro' && e.conDueno && viejoAhi && !e.testigo) {
-        // Con dueño no se espanta: el dueño lo putea y el perro caga igual.
+        // Con dueño no se espanta: el dueño se siente vigilado y va a tener que levantarla.
         e.testigo = true;
         estado.recienPuteadas.push(e);
       }
       e.aviso -= dt;
-      if (e.aviso <= 0) {
+      if (e.aviso <= 0 && e.testigo) {
+        // El perro cagó, pero el dueño, avergonzado, la levanta y se va puteando.
+        estado.cacasLevantadas += 1;
+        estado.recienLevantadas.push(e);
+      } else if (e.aviso <= 0) {
         estado.problemas[e.zona] += e.suma;
         if (e.objeto) estado.objetos[e.zona].push({ tipo: e.objeto, lugar: e.lugar });
         estado.recienCaidos.push(e);

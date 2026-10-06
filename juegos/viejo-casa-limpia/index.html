@@ -45,25 +45,28 @@
     casa: '¿Vas a dejar que ganen los nietos?',
     vereda: '¿Vas a dejar que gane el perro?',
   };
-  // Lo que dice el viejo cuando le cae algo, según quién fue.
-  const FRASES_EVENTO = {
-    'perro-solo': ['¡La pucha! ¡Otra vez!', '¡Perro del diablo!', '¡Pago los impuestos para esto!'],
-    'perro-dueno': ['¡Levantala, sinvergüenza!', '¡Y encima no la levanta!', '¡Hay que ser caradura!'],
-    'vecino-vereda': ['¡Mal educado!', '¡Esta juventud!', '¡Te vi, eh! ¡Te vi!'],
-    'vecino-patio': ['¡Eh! ¡Que no es un basural!', '¡Lo voy a denunciar a la municipalidad!'],
-    'nietos-casa': ['¡Las zapatillas, chicos!', '¡Recién lo había limpiado!', 'Nietos, sí. Chiqueros, no.'],
+  // Todo lo que dice cada uno, por situación. Muchas por lista para que no se repitan.
+  const FRASES = {
+    espantar: ['¡Juiiiira!', '¡Juira, perro sarnoso!', '¡Chucho! ¡Chucho!', '¡Juira, juira, juira!', '¡Fuera de mi vereda, bicho!', '¡Ni lo pienses, pulgoso!', '¡Andá a ensuciar a tu casa!', '¡Te conozco, eh! ¡Juira!'],
+    perroSolo: ['¡Me dejó un regalito!', '¡Justo en el medio de la vereda!', '¡Ese chucho me tiene de punto!', '¡Come mejor que yo ese perro!', '¡Siempre en el mismo baldosón!', '¡Lo voy a agarrar a escobazos!'],
+    perroDuenoDistraido: ['¡Y encima no la levanta!', '¡La bolsita, sinvergüenza!', '¡Te vi, eh! ¡Te vi!', '¡La próxima te la dejo en la puerta!', '¡Silbá, silbá nomás!'],
+    duenoAtrapado: ['Uh... el viejo.', '¡Ya va, ya va!', 'Ehh... ¡no es lo que parece!', '¡Recién llegamos!'],
+    duenoSeVa: ['¡Ni que fuera tu vereda!', '¡Viejo buchón!', '¡Qué amargado!', '¡Uy, el vigilante del barrio!', '¡Calmate, jubilado!', '¡Andá a regar las plantas!'],
+    viejoGana: ['¡Es MI vereda, nene!', '¡Y que no se repita!', '¡Así me gusta!', '¡Llevate la bolsita, campeón!', '¡Educación, se llama!'],
+    vecinoVereda: ['¡El tacho está en la esquina!', '¡Mal educado!', '¡Te vi, eh! ¡Te vi!', '¡Esta juventud!', '¡Levantá eso, atorrante!'],
+    vecinoPatio: ['¡Eh, que no es un basural!', '¡Vecino, lo estoy viendo!', '¡Le devuelvo la bolsa por arriba, eh!', '¡Otra bolsa y llamo al patrullero!', '¡Qué vecino, mamita!'],
+    nietos: ['¡Las zapatillas, chicos!', '¡Recién encerado!', '¡No se corre adentro!', '¡¿Quién les dio caramelos?!', '¡Igualitos a su padre!', '¡Ya le cuento a su abuela!', '¡Las manos en el vidrio no!', '¡Pies limpios o a la calle!'],
+    // Cuando no pasa nada, se queja de lo que está peor.
+    patio: ['¡Este pasto crece de prepo!', '¡Acá se pierde una vaca!', '¡Ya me llega a las rodillas!', '¡Mañana me compro una cabra!', '¡Parece Misiones el patio!', '¡Ni que lo regara!'],
+    casa: ['¡No se ve ni el sol por la ventana!', '¡Esas ventanas parecen esmeriladas!', '¡Mirá las marcas de los dedos!', '¡Esto con diario y alcohol sale!'],
+    vereda: ['¡Qué dirán los vecinos!', '¡La vereda es la cara de la casa!', '¡Esta vereda la baldeaba todos los días!', '¡Mirá las hojas, otoño eterno!'],
+    // Al ponerse a trabajar en cada lugar.
+    trabajarPatio: ['¡Tomá, yuyo!', '¡Al ras, como en la colimba!', '¡Cortadito como cancha de golf!'],
+    trabajarCasa: ['¡Con diario queda mejor!', '¡Así brilla!', '¡A ver si ahora entra el sol!'],
+    trabajarVereda: ['¡Escoba y a la calle!', '¡Que brille la baldosa!', '¡Ni una hoja, ni una!'],
+    caminar: ['Ufff...', '¡Ay, la cadera!', 'Ya voy, ya voy...', '¡Mis rodillas!', 'Despacito...'],
   };
-  const FRASES_SUELTAS = [
-    '¡Ay, mi ciática!',
-    'En mi época había respeto.',
-    '¡Me tienen podrido!',
-    '¡Uno no puede descansar tranquilo!',
-    '¿Quién va a cortar esto? ¿El Papa?',
-    'Yo a tu edad tenía la vereda baldeada.',
-  ];
-  const FRASES_ESPANTAR = ['¡Juira, perro!', '¡Fuera, chucho!', '¡Juira de acá!', '¡Ni se te ocurra, sabandija!'];
-  const PUTEADAS_DUENO = ['¡Qué te metés, viejo choto!', '¡Es vereda pública, abuelo!', '¡Andá a regar las plantas!', '¡Calmate, jubilado!'];
-  const RESPUESTAS_VIEJO = ['¡Sinvergüenza!', '¡Maleducado!', '¡Le voy a hacer la denuncia!'];
+
 
   const entrada = { zona: null, trabajar: false };
   let estado = V.crearEstado(Date.now());
@@ -83,6 +86,8 @@
   let posViejoPrevia = null;
   let finDesde = 0;
   let proximoSonidoTrabajo = 0;
+  let decirLuego = null; // respuesta del viejo que llega un momento después
+  let estabaTrabajando = false;
 
   // ---------- Sonido (WebAudio, sin archivos) ----------
   let audio = null;
@@ -146,6 +151,7 @@
     actores = [];
     conocidos = new WeakSet();
     globo = null;
+    decirLuego = null;
     zonaQuieta = 1;
     proximaFraseSuelta = 9;
   }
@@ -181,7 +187,16 @@
   window.addEventListener('keyup', (e) => { if (e.key === ' ') entrada.trabajar = false; });
 
   // ---------- Utilidades de dibujo y animación ----------
-  const azar = (lista) => lista[Math.floor(Math.random() * lista.length)];
+  // Saca frases de una bolsa mezclada: no repite hasta haber dicho todas las de esa lista.
+  const bolsas = new Map();
+  function azar(lista) {
+    let bolsa = bolsas.get(lista);
+    if (!bolsa || bolsa.length === 0) {
+      bolsa = [...lista].sort(() => Math.random() - 0.5);
+      bolsas.set(lista, bolsa);
+    }
+    return bolsa.pop();
+  }
   const lerp = (a, b, t) => a + (b - a) * t;
   const limitar = (t) => Math.max(0, Math.min(1, t));
   const suave = (t) => t * t * (3 - 2 * t);
@@ -319,7 +334,7 @@
     ctx.restore();
   }
 
-  function dibujarPersona(x, y, { pelo, remera, chico, caminando, corriendo, dir = 1, brazoArriba }) {
+  function dibujarPersona(x, y, { pelo, remera, chico, caminando, corriendo, dir = 1, brazoArriba, agachado }) {
     const escala = chico ? 0.65 : 1;
     const vel = corriendo ? 24 : 12;
     const paso = caminando || corriendo ? Math.sin(reloj * vel) * (corriendo ? 8 : 5) : 0;
@@ -327,8 +342,15 @@
     ctx.save();
     ctx.translate(x, y - (corriendo ? Math.abs(Math.sin(reloj * vel)) * 3 : 0));
     ctx.scale(escala * dir, escala);
-    linea(-5, -30, -5 + paso, 0, 6, '#33475b');
-    linea(5, -30, 5 - paso, 0, 6, '#33475b');
+    if (agachado) {
+      // En cuclillas: rodillas dobladas y el cuerpo más abajo, juntando la caca con la bolsa.
+      linea(-5, -16, 8, -12, 6, '#33475b'); linea(8, -12, 4, 0, 6, '#33475b');
+      ctx.translate(0, 16);
+      ctx.rotate(0.35);
+    } else {
+      linea(-5, -30, -5 + paso, 0, 6, '#33475b');
+      linea(5, -30, 5 - paso, 0, 6, '#33475b');
+    }
     ctx.fillStyle = remera;
     ctx.beginPath(); ctx.roundRect(-12, -62, 24, 34, 6); ctx.fill();
     linea(-10, -58, -14 - paso * 0.5, -36, 5, '#e8b48a');
@@ -552,6 +574,7 @@
     for (const a of actores) {
       if (a.fase === 'entrando' && estado.recienCaidos.includes(a.e)) a.fase = 'saliendo';
       if (a.fase === 'entrando' && estado.recienEspantados.includes(a.e)) a.fase = 'huyendo';
+      if (a.fase === 'entrando' && estado.recienLevantadas.includes(a.e)) a.fase = 'levantando';
       if (a.fase !== 'entrando') a.s += dt;
     }
     actores = actores.filter((a) => !(a.fase !== 'entrando' && a.s > 3));
@@ -604,20 +627,39 @@
       } }];
     }
     if (tipo === 'perro-vereda') {
-      // Perro con dueño: frena, se agacha y el dueño silba. Si el viejo está, el dueño lo putea.
+      // Perro con dueño: frena y se agacha. Si el viejo no está, el dueño silba mirando para otro lado;
+      // si el viejo lo ve, el dueño la levanta avergonzado y se va puteando.
       const destino = posicionObjeto('vereda', a.e.lugar);
       const llegada = destino.x + 18;
       let px;
-      if (a.fase === 'entrando') px = lerp(-60, llegada, suave(limitar(p / 0.6)));
-      else px = llegada + a.s * 90;
-      const duenoX = px - 58;
-      const agachado = a.fase === 'entrando' && p > 0.65;
-      const caminando = a.fase !== 'entrando' || p < 0.6;
+      let duenoX;
+      let duenoAgachado = false;
+      let caminando;
+      if (a.fase === 'entrando') {
+        px = lerp(-60, llegada, suave(limitar(p / 0.6)));
+        duenoX = px - 58;
+        caminando = p < 0.6;
+      } else if (a.fase === 'levantando') {
+        // 0-0.4 s va hasta la caca, 0.4-1.1 s se agacha, después se van.
+        const salida = Math.max(0, a.s - 1.1);
+        px = llegada + salida * 110;
+        duenoX = salida > 0 ? destino.x - 30 + salida * 110 : lerp(llegada - 58, destino.x - 30, suave(limitar(a.s / 0.4)));
+        duenoAgachado = a.s > 0.4 && a.s < 1.1;
+        caminando = a.s < 0.4 || salida > 0;
+      } else {
+        px = llegada + a.s * 90;
+        duenoX = px - 58;
+        caminando = true;
+      }
+      const perroAgachado = a.fase === 'entrando' && p > 0.65;
+      const cacaVisible = (a.fase === 'entrando' && p > 0.95) || (a.fase === 'levantando' && a.s < 0.8);
       return [
         { y: destino.y - 22, dibujar: () => {
-          dibujarPersona(duenoX, destino.y - 22, { pelo: '#2d3436', remera: '#00b894', caminando, brazoArriba: !!a.puteada });
+          if (cacaVisible) dibujarCaca(destino.x, destino.y);
+          dibujarPersona(duenoX, destino.y - 22, { pelo: '#2d3436', remera: '#00b894', caminando, agachado: duenoAgachado });
+          if (duenoAgachado) dibujarBolsa(duenoX + 16, destino.y - 4);
           linea(duenoX + 14, destino.y - 58, px + 10, destino.y - 18, 1.5, '#c0392b'); // correa
-          if (agachado && !a.puteada) {
+          if (perroAgachado && !a.e.testigo) {
             ctx.fillStyle = '#333';
             ctx.font = '16px serif';
             ctx.textAlign = 'center';
@@ -625,7 +667,7 @@
           }
           if (a.puteada && reloj < a.puteadaHasta) dibujarGlobo(duenoX, destino.y - 150, a.puteada);
         } },
-        { y: destino.y, dibujar: () => dibujarPerro(px, destino.y, { agachado }) },
+        { y: destino.y, dibujar: () => dibujarPerro(px, destino.y, { agachado: perroAgachado }) },
       ];
     }
     if (tipo === 'vecino-vereda') {
@@ -727,9 +769,10 @@
     Lienzo.textoCentrado(ctx, `${Math.floor(estado.segundos)}s`, 310, 64, '#ffd34d');
     const nuevo = Math.floor(estado.segundos) >= record;
     Lienzo.textoCentrado(ctx, nuevo ? '¡Nuevo récord!' : `Tu récord: ${record}s`, 365, 18, nuevo ? '#7bed9f' : '#ccc');
-    if (estado.perrosEspantados > 0) {
-      Lienzo.textoCentrado(ctx, `Perros espantados: ${estado.perrosEspantados}`, 392, 15, '#ccc');
-    }
+    const logros = [];
+    if (estado.perrosEspantados > 0) logros.push(`Perros espantados: ${estado.perrosEspantados}`);
+    if (estado.cacasLevantadas > 0) logros.push(`Dueños avergonzados: ${estado.cacasLevantadas}`);
+    logros.forEach((texto, k) => Lienzo.textoCentrado(ctx, texto, 392 + k * 22, 15, '#ccc'));
     ctx.fillStyle = '#ffd34d';
     ctx.beginPath(); ctx.roundRect(30, 440, ANCHO - 60, 56, 14); ctx.fill();
     Lienzo.textoCentrado(ctx, REINTENTAR[estado.perdioPor], 468, 15, '#222');
@@ -744,7 +787,7 @@
 
   function reaccionar(dt, viejo, caminando, trabajando) {
     if (!caminando) zonaQuieta = V.zonaActual(estado);
-    if (caminando && !estabaCaminando && !globo && Math.random() < 0.4) decir('Ufff...', 1);
+    if (caminando && !estabaCaminando && !globo && Math.random() < 0.4) decir(azar(FRASES.caminar), 1.2);
     if (!caminando && estabaCaminando) {
       for (let k = 0; k < 6; k++) particulas.push({ x: viejo.x + (Math.random() - 0.5) * 20, y: viejo.y, vx: (Math.random() - 0.5) * 60, vy: -20 - Math.random() * 30, vida: 0.35, color: 'rgba(120,100,80,0.6)', g: 60 });
     }
@@ -753,23 +796,40 @@
     for (const e of estado.recienPuteadas) {
       const actor = actores.find((a) => a.e === e);
       if (actor) {
-        actor.puteada = azar(PUTEADAS_DUENO);
-        actor.puteadaHasta = reloj + 2.4;
+        actor.puteada = azar(FRASES.duenoAtrapado);
+        actor.puteadaHasta = reloj + 1.8;
       }
+    }
+    for (const e of estado.recienLevantadas) {
+      const actor = actores.find((a) => a.e === e);
+      if (actor) {
+        actor.puteada = azar(FRASES.duenoSeVa);
+        actor.puteadaHasta = reloj + 2.6;
+      }
+      decirLuego = { texto: azar(FRASES.viejoGana), en: reloj + 1.3 };
     }
     for (const e of estado.recienCaidos) {
       sacudon = 0.2;
       SONIDOS.plop();
       vibrar(30);
-      if (e.tipo !== 'perro') decir(azar(FRASES_EVENTO[`${e.tipo}-${e.zona}`]));
-      else if (e.testigo) decir(azar(RESPUESTAS_VIEJO));
-      else decir(azar(FRASES_EVENTO[e.conDueno ? 'perro-dueno' : 'perro-solo']));
+      if (e.tipo === 'nietos') decir(azar(FRASES.nietos));
+      else if (e.tipo === 'vecino') decir(azar(e.zona === 'patio' ? FRASES.vecinoPatio : FRASES.vecinoVereda));
+      else decir(azar(e.conDueno ? FRASES.perroDuenoDistraido : FRASES.perroSolo));
     }
     for (const e of estado.recienEspantados) {
       SONIDOS.fuera();
       vibrar(15);
-      decir(azar(FRASES_ESPANTAR));
+      decir(azar(FRASES.espantar));
     }
+    if (decirLuego && reloj >= decirLuego.en) {
+      decir(decirLuego.texto);
+      decirLuego = null;
+    }
+    if (trabajando && !estabaTrabajando && !globo && Math.random() < 0.35) {
+      const zona = V.ZONAS[V.zonaActual(estado)];
+      decir(azar(FRASES[`trabajar${zona[0].toUpperCase()}${zona.slice(1)}`]), 1.8);
+    }
+    estabaTrabajando = trabajando;
 
     if (trabajando) {
       const zona = V.ZONAS[V.zonaActual(estado)];
@@ -805,7 +865,10 @@
 
     proximaFraseSuelta -= dt;
     if (proximaFraseSuelta <= 0) {
-      if (!globo && !caminando) decir(azar(FRASES_SUELTAS), 2.8);
+      if (!globo && !caminando) {
+        const peor = V.ZONAS.reduce((a, z) => (estado.problemas[z] > estado.problemas[a] ? z : a));
+        decir(azar(FRASES[peor]), 2.8);
+      }
       proximaFraseSuelta = 9 + Math.random() * 5;
     }
     if (globo && reloj > globo.hasta) globo = null;

@@ -174,18 +174,32 @@ test('el perro deja una caca en el lugar donde se agachó y barriendo se levanta
   assert.equal(e.objetos.vereda.length, 0);
 });
 
-test('al perro con dueño no se lo espanta: el dueño putea una sola vez y caga igual', () => {
+test('si el viejo lo ve, el dueño la levanta: no ensucia y putea una sola vez', () => {
   const e = V.crearEstado(3);
   e.proximoEvento = 999;
   e.y = 2;
-  e.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, objeto: 'caca', lugar: 0.5, aviso: 0.3, conDueno: true }];
-  V.paso(e, 0.1, { zona: null, trabajar: true });
+  const vereda = e.problemas.vereda;
+  e.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, objeto: 'caca', lugar: 0.5, aviso: 0.3, avisoTotal: 2.5, conDueno: true }];
+  V.paso(e, 0.1, quieto);
   assert.equal(e.recienPuteadas.length, 1);
   assert.equal(e.perrosEspantados, 0);
-  V.paso(e, 0.1, { zona: null, trabajar: true });
+  V.paso(e, 0.1, quieto);
   assert.equal(e.recienPuteadas.length, 0);
-  V.paso(e, 0.2, { zona: null, trabajar: true });
+  V.paso(e, 0.2, quieto);
+  assert.equal(e.recienLevantadas.length, 1);
+  assert.equal(e.recienCaidos.length, 0);
+  assert.equal(e.cacasLevantadas, 1);
+  assert.equal(e.objetos.vereda.length, 0);
+  assert.ok(e.problemas.vereda < vereda + 5);
+});
+
+test('si el viejo no está, el dueño se hace el distraído y la caca queda', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 999;
+  e.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, objeto: 'caca', lugar: 0.5, aviso: 0.05, avisoTotal: 2.5, conDueno: true }];
+  V.paso(e, 0.1, quieto);
   assert.equal(e.recienCaidos.length, 1);
+  assert.equal(e.objetos.vereda.length, 1);
 });
 
 test('perros sueltos y con dueño se alternan, y el suelto da tiempo de llegar desde el patio', () => {
