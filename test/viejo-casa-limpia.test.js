@@ -107,17 +107,17 @@ test('el perro suelto no se espanta antes de terminar de entrar', () => {
   assert.equal(e.perrosEspantados, 0);
 });
 
-test('al vecino no se lo espanta, y al perro tampoco si el viejo no está en la vereda', () => {
+test('lo de otra zona no se espanta, y al perro tampoco si el viejo no está en la vereda', () => {
   const e = V.crearEstado(3);
   e.proximoEvento = 99;
   e.y = 2;
   e.eventos = [
-    { tipo: 'vecino', zona: 'patio', suma: 18, aviso: 1, avisoTotal: 2 },
+    { tipo: 'nietos', zona: 'casa', suma: 22, aviso: 1, avisoTotal: 2 },
     { tipo: 'perro', zona: 'vereda', suma: 25, aviso: 1, avisoTotal: 2 },
   ];
   V.paso(e, 0.1, { zona: null, trabajar: true });
   assert.equal(e.eventos.length, 1);
-  assert.equal(e.eventos[0].tipo, 'vecino');
+  assert.equal(e.eventos[0].tipo, 'nietos');
 
   const f = V.crearEstado(3);
   f.proximoEvento = 99;
@@ -254,4 +254,24 @@ test('el pibe da el mismo margen que el perro suelto para llegar', () => {
   const { avisoInicial, avisoMinimo } = V.CONFIG.espantable;
   assert.ok(pibe.avisoTotal <= avisoInicial && pibe.avisoTotal >= avisoMinimo);
   assert.ok(pibe.avisoTotal > V.CONFIG.avisoEvento);
+});
+
+test('si el viejo está en el patio, el vecino se esconde sin tirar la bolsa', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 999;
+  e.y = 0;
+  e.eventos = [{ tipo: 'vecino', zona: 'patio', suma: 18, objeto: 'bolsa', lugar: 0.5, aviso: 1.5, avisoTotal: 3 }];
+  V.paso(e, 0.1, quieto);
+  assert.equal(e.vecinosRetados, 1);
+  assert.equal(e.recienEspantados.length, 1);
+  assert.equal(e.objetos.patio.length, 0);
+});
+
+test('si el viejo no está, el vecino tira la bolsa al patio', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 999;
+  e.eventos = [{ tipo: 'vecino', zona: 'patio', suma: 18, objeto: 'bolsa', lugar: 0.5, aviso: 0.05, avisoTotal: 3 }];
+  V.paso(e, 0.1, quieto);
+  assert.equal(e.vecinosRetados, 0);
+  assert.deepEqual(e.objetos.patio, [{ tipo: 'bolsa', lugar: 0.5 }]);
 });

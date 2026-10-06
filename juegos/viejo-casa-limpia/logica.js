@@ -51,7 +51,8 @@
       perdioPor: null,
       perrosEspantados: 0,
       cacasLevantadas: 0,
-      pibesCorridos: 0, // pibes que el viejo sacó a escobazos antes de que tiraran basura // las que levantó el dueño porque lo vio el viejo
+      pibesCorridos: 0, // pibes que el viejo sacó a escobazos antes de que tiraran basura
+      vecinosRetados: 0, // veces que el vecino se escondió con la bolsa porque el viejo estaba en el patio // las que levantó el dueño porque lo vio el viejo
       proximoPerroConDueno: null, // se sortea con el primer perro y después se alterna
       objetos: { patio: [], casa: [], vereda: [] }, // lo que quedó tirado, del más viejo al más nuevo
       // Lo ocurrido en el último paso, para que la pantalla reaccione (sonido, sacudón).
@@ -101,7 +102,7 @@
       e.conDueno = estado.proximoPerroConDueno;
       estado.proximoPerroConDueno = !e.conDueno;
       e.aviso = e.conDueno ? CONFIG.avisoPerroDueno : avisoEspantable(estado.segundos);
-    } else if (e.tipo === 'pibe') {
+    } else if (e.tipo === 'pibe' || e.tipo === 'vecino') {
       e.aviso = avisoEspantable(estado.segundos);
     } else {
       e.aviso = CONFIG.avisoEvento;
@@ -150,12 +151,13 @@
     for (const e of estado.eventos) {
       const viejoAhi = quieto && zonaViejo === e.zona;
       const llego = 1 - e.aviso / e.avisoTotal >= CONFIG.espantable.llegada;
-      const espantable = (e.tipo === 'perro' && !e.conDueno) || e.tipo === 'pibe';
+      const espantable = (e.tipo === 'perro' && !e.conDueno) || e.tipo === 'pibe' || e.tipo === 'vecino';
       if (espantable && viejoAhi && llego) {
-        // Si el perro suelto o el pibe llegan y ven al viejo en la vereda, salen rajando
-        // (al pibe, a escobazos) sin ensuciar nada.
+        // Si llegan y ven al viejo, se van sin ensuciar: el perro suelto sale rajando, al pibe
+        // lo corre a escobazos y el vecino se esconde con la bolsa detrás de la medianera.
         if (e.tipo === 'perro') estado.perrosEspantados += 1;
-        else estado.pibesCorridos += 1;
+        else if (e.tipo === 'pibe') estado.pibesCorridos += 1;
+        else estado.vecinosRetados += 1;
         estado.recienEspantados.push(e);
         continue;
       }
