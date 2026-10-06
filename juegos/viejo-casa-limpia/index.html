@@ -614,7 +614,7 @@
     if (tipo === 'perro-vereda' && !a.e.conDueno) {
       // Perro suelto: ladra desde el borde, entra corriendo, olfatea y se agacha.
       // Si al llegar ve al viejo en la vereda, se escapa.
-      const LLEGADA = V.CONFIG.perroSolo.llegada;
+      const LLEGADA = V.CONFIG.espantable.llegada;
       const destino = posicionObjeto('vereda', a.e.lugar);
       const desdeIzquierda = (a.e.lugar * 7) % 1 < 0.5;
       const dir = desdeIzquierda ? 1 : -1;

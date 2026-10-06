@@ -31,11 +31,16 @@
   function bucle(paso) {
     let previo = performance.now();
     function cuadro(ahora) {
+      // Se pide el próximo cuadro antes de dibujar: si un cuadro falla, el juego sigue andando.
+      requestAnimationFrame(cuadro);
       // Limita dt para que volver de otra pestaña no salte el juego.
       const dt = Math.min((ahora - previo) / 1000, 0.05);
       previo = ahora;
-      paso(dt);
-      requestAnimationFrame(cuadro);
+      try {
+        paso(dt);
+      } catch (error) {
+        console.error(error);
+      }
     }
     requestAnimationFrame(cuadro);
   }
