@@ -53,7 +53,9 @@
     duenoAtrapado: ['Uh... el viejo.', '¡Ya va, ya va!', 'Ehh... ¡no es lo que parece!', '¡Recién llegamos!'],
     duenoSeVa: ['¡Ni que fuera tu vereda!', '¡Viejo buchón!', '¡Qué amargado!', '¡Uy, el vigilante del barrio!', '¡Calmate, jubilado!', '¡Andá a regar las plantas!'],
     viejoGana: ['¡Es MI vereda, nene!', '¡Y que no se repita!', '¡Así me gusta!', '¡Llevate la bolsita, campeón!', '¡Educación, se llama!'],
-    vecinoVereda: ['¡El tacho está en la esquina!', '¡Mal educado!', '¡Te vi, eh! ¡Te vi!', '¡Esta juventud!', '¡Levantá eso, atorrante!'],
+    pibeTiro: ['¡El tacho está en la esquina!', '¡Mal educado!', '¡Te vi, eh! ¡Te vi!', '¡Esta juventud!', '¡Levantá eso, atorrante!'],
+    escobazos: ['¡Tomá, atorrante!', '¡Te voy a dar basura a vos!', '¡Rajá de acá, vago!', '¡La escoba no perdona!', '¡Escobazo y a tu casa!', '¡Andá a tirar eso a tu vereda!'],
+    pibeHuye: ['¡Ay! ¡Perdón, don!', '¡Uy, el viejo de la escoba!', '¡No me pegue, abuelo!', '¡Era una joda!', '¡Ya me voy, ya me voy!'],
     vecinoPatio: ['¡Eh, que no es un basural!', '¡Vecino, lo estoy viendo!', '¡Le devuelvo la bolsa por arriba, eh!', '¡Otra bolsa y llamo al patrullero!', '¡Qué vecino, mamita!'],
     nietos: ['¡Las zapatillas, chicos!', '¡Recién encerado!', '¡No se corre adentro!', '¡¿Quién les dio caramelos?!', '¡Igualitos a su padre!', '¡Ya le cuento a su abuela!', '¡Las manos en el vidrio no!', '¡Pies limpios o a la calle!'],
     // Cuando no pasa nada, se queja de lo que está peor.
@@ -86,6 +88,7 @@
   let posViejoPrevia = null;
   let finDesde = 0;
   let proximoSonidoTrabajo = 0;
+  let escobazoHasta = 0; // mientras dure, el viejo revolea la escoba
   let decirLuego = null; // respuesta del viejo que llega un momento después
   let estabaTrabajando = false;
 
@@ -137,6 +140,8 @@
     plop: () => tono('sine', 320, 70, 0.22, 0.5),
     fuera: () => { tono('square', 520, 760, 0.1, 0.08); setTimeout(() => tono('square', 760, 520, 0.12, 0.08), 110); },
     perder: () => tono('triangle', 440, 90, 0.9, 0.3),
+    silbido: () => { tono('sine', 900, 1300, 0.12, 0.05); setTimeout(() => tono('sine', 900, 1300, 0.12, 0.05), 180); },
+    paf: () => { ruido(0.08, 500, 0.5); tono('square', 200, 90, 0.08, 0.08); },
     ladrido: () => { tono('square', 380, 240, 0.08, 0.07); setTimeout(() => tono('square', 400, 250, 0.08, 0.07), 140); },
   };
   function vibrar(ms) {
@@ -301,8 +306,8 @@
       ctx.fillStyle = '#4aa3df';
       ctx.beginPath(); ctx.roundRect(x - 2, y - 8, 14, 12, 3); ctx.fill();
     } else {
-      // Escoba que barre de lado a lado
-      const barrido = Math.sin(reloj * 12) * 8;
+      // Escoba que barre de lado a lado; a escobazos, revoleada a lo loco.
+      const barrido = reloj < escobazoHasta ? Math.sin(reloj * 34) * 22 : Math.sin(reloj * 12) * 8;
       linea(x - 6, y - 28, x + 8 + barrido, y + 34, 3, '#a0743f');
       ctx.save();
       ctx.translate(x + 10 + barrido, y + 38);
@@ -379,10 +384,21 @@
       ctx.beginPath(); ctx.moveTo(x - 7, y); ctx.lineTo(x - 3, y - 9); ctx.lineTo(x + 6, y - 6); ctx.lineTo(x + 7, y + 2); ctx.closePath(); ctx.fill();
     }
   }
+  // Bolsa de consorcio negra, atada arriba con dos orejitas.
   function dibujarBolsa(x, y) {
-    circulo(x, y, 9, '#222');
-    linea(x - 3, y - 9, x - 1, y - 14, 2, '#222');
-    linea(x + 3, y - 9, x + 1, y - 14, 2, '#222');
+    ctx.fillStyle = '#2b2b2b';
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y - 11);
+    ctx.quadraticCurveTo(x - 14, y - 4, x - 11, y + 7);
+    ctx.quadraticCurveTo(x, y + 11, x + 11, y + 7);
+    ctx.quadraticCurveTo(x + 14, y - 4, x + 4, y - 11);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x - 5, y - 15, 4, 2.5, -0.6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + 5, y - 15, 4, 2.5, 0.6, 0, Math.PI * 2); ctx.fill();
+    linea(x - 6, y - 2, x - 7, y + 4, 2, 'rgba(255,255,255,0.25)'); // brillo del plástico
+    ctx.fillStyle = '#e9e2cf'; // asoma un papel
+    ctx.fillRect(x - 2, y - 13, 4, 4);
   }
 
   // ---------- Escenario ----------
@@ -569,6 +585,7 @@
         conocidos.add(e);
         actores.push({ e, fase: 'entrando', s: 0, ninos: [], puteada: null });
         if (e.tipo === 'perro' && !e.conDueno) SONIDOS.ladrido();
+        if (e.tipo === 'pibe') SONIDOS.silbido();
       }
     }
     for (const a of actores) {
@@ -670,14 +687,31 @@
         { y: destino.y, dibujar: () => dibujarPerro(px, destino.y, { agachado: perroAgachado }) },
       ];
     }
-    if (tipo === 'vecino-vereda') {
-      // Pasa caminando, toma algo y revolea el vaso sin frenar.
-      const x = a.fase === 'entrando' ? lerp(400, 200, p) : 200 - a.s * 80;
-      const figuras = [{ y: 462, dibujar: () => dibujarPersona(x, 462, { pelo: '#999', remera: '#2e86de', caminando: true, dir: -1, brazoArriba: p > 0.75 && a.fase === 'entrando' }) }];
-      if (a.fase === 'entrando' && p > 0.75) {
-        const t = (p - 0.75) / 0.25;
-        const cae = posicionObjeto('vereda', a.e.lugar);
-        figuras.push({ y: 999, dibujar: () => dibujarBasura(lerp(x - 14, cae.x, t), lerp(390, cae.y, t) - Math.sin(t * Math.PI) * 50, 1) });
+    if (tipo === 'pibe-vereda') {
+      // Un pibe pasa tomando algo y revolea el vaso. Si el viejo lo agarra antes, sale corriendo a escobazos.
+      const cae = posicionObjeto('vereda', a.e.lugar);
+      const frena = Math.min(ANCHO - 60, cae.x + 70);
+      let x;
+      let corriendo = false;
+      let dir = -1;
+      if (a.fase === 'entrando') x = lerp(ANCHO + 30, frena, suave(limitar(p / 0.8)));
+      else if (a.fase === 'saliendo') x = frena - a.s * 80;
+      else { x = frena + a.s * 170; corriendo = true; dir = 1; }
+      const tira = a.fase === 'entrando' && p > 0.8;
+      const figuras = [{ y: 462, dibujar: () => {
+        dibujarPersona(x, 462, { pelo: '#d35400', remera: '#f39c12', caminando: !corriendo, corriendo, dir, brazoArriba: tira || corriendo });
+        if (a.fase === 'entrando' && !tira) dibujarBasura(x - 14, 430, 1); // el vaso en la mano
+        if (a.fase === 'huyendo' && a.s < 0.45) {
+          ctx.fillStyle = '#c0392b';
+          ctx.font = 'bold 22px system-ui';
+          ctx.textAlign = 'center';
+          ctx.fillText('¡PAF!', x - 10, 380 + a.s * 20);
+        }
+        if (a.fase === 'huyendo' && a.s < 1.4) dibujarGlobo(x, 360, a.grito);
+      } }];
+      if (tira) {
+        const t = (p - 0.8) / 0.2;
+        figuras.push({ y: 999, dibujar: () => dibujarBasura(lerp(x - 14, cae.x, t), lerp(430, cae.y, t) - Math.sin(t * Math.PI) * 40, 1) });
       }
       return figuras;
     }
@@ -753,7 +787,7 @@
     ctx.font = '13px system-ui';
     ctx.textAlign = 'center';
     ctx.fillText('Tocá una zona para ir · mantené para trabajar', ANCHO / 2, 606);
-    ctx.fillText('Si oís ¡GUAU!, corré a la vereda', ANCHO / 2, 626);
+    ctx.fillText('¿Ladrido o silbido? ¡Corré a la vereda!', ANCHO / 2, 626);
   }
 
   function dibujarFin() {
@@ -772,6 +806,7 @@
     const logros = [];
     if (estado.perrosEspantados > 0) logros.push(`Perros espantados: ${estado.perrosEspantados}`);
     if (estado.cacasLevantadas > 0) logros.push(`Dueños avergonzados: ${estado.cacasLevantadas}`);
+    if (estado.pibesCorridos > 0) logros.push(`Pibes corridos a escobazos: ${estado.pibesCorridos}`);
     logros.forEach((texto, k) => Lienzo.textoCentrado(ctx, texto, 392 + k * 22, 15, '#ccc'));
     ctx.fillStyle = '#ffd34d';
     ctx.beginPath(); ctx.roundRect(30, 440, ANCHO - 60, 56, 14); ctx.fill();
@@ -813,13 +848,23 @@
       SONIDOS.plop();
       vibrar(30);
       if (e.tipo === 'nietos') decir(azar(FRASES.nietos));
-      else if (e.tipo === 'vecino') decir(azar(e.zona === 'patio' ? FRASES.vecinoPatio : FRASES.vecinoVereda));
+      else if (e.tipo === 'vecino') decir(azar(FRASES.vecinoPatio));
+      else if (e.tipo === 'pibe') decir(azar(FRASES.pibeTiro));
       else decir(azar(e.conDueno ? FRASES.perroDuenoDistraido : FRASES.perroSolo));
     }
     for (const e of estado.recienEspantados) {
-      SONIDOS.fuera();
       vibrar(15);
-      decir(azar(FRASES.espantar));
+      if (e.tipo === 'pibe') {
+        SONIDOS.paf();
+        setTimeout(SONIDOS.paf, 160);
+        escobazoHasta = reloj + 0.9;
+        decir(azar(FRASES.escobazos));
+        const actor = actores.find((a) => a.e === e);
+        if (actor) actor.grito = azar(FRASES.pibeHuye);
+      } else {
+        SONIDOS.fuera();
+        decir(azar(FRASES.espantar));
+      }
     }
     if (decirLuego && reloj >= decirLuego.en) {
       decir(decirLuego.texto);
@@ -911,7 +956,7 @@
     const figuras = actores.flatMap(figurasActor);
     figuras.push({ y: viejo.y, dibujar: () => dibujarViejo(viejo.x, viejo.y, {
       paso: distanciaCaminada * 0.16,
-      trabajando,
+      trabajando: trabajando || reloj < escobazoHasta,
       herramienta: V.ZONAS[V.zonaActual(estado)],
     }) });
     figuras.sort((a, b) => a.y - b.y).forEach((f) => f.dibujar());

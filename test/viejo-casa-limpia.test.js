@@ -112,7 +112,7 @@ test('al vecino no se lo espanta, y al perro tampoco si el viejo no está en la 
   e.proximoEvento = 99;
   e.y = 2;
   e.eventos = [
-    { tipo: 'vecino', zona: 'vereda', suma: 18, aviso: 1, avisoTotal: 2 },
+    { tipo: 'vecino', zona: 'patio', suma: 18, aviso: 1, avisoTotal: 2 },
     { tipo: 'perro', zona: 'vereda', suma: 25, aviso: 1, avisoTotal: 2 },
   ];
   V.paso(e, 0.1, { zona: null, trabajar: true });
@@ -215,7 +215,43 @@ test('perros sueltos y con dueño se alternan, y el suelto da tiempo de llegar d
   }
   for (let i = 1; i < perros.length; i++) assert.notEqual(perros[i].conDueno, perros[i - 1].conDueno);
   const caminataDesdePatio = 2 / V.CONFIG.velocidadViejo;
-  assert.ok(V.avisoPerroSolo(0) > caminataDesdePatio + 0.4);
-  assert.ok(V.avisoPerroSolo(300) < V.avisoPerroSolo(0));
-  assert.equal(V.avisoPerroSolo(1000), V.CONFIG.perroSolo.avisoMinimo);
+  assert.ok(V.avisoEspantable(0) > caminataDesdePatio + 0.4);
+  assert.ok(V.avisoEspantable(300) < V.avisoEspantable(0));
+  assert.equal(V.avisoEspantable(1000), V.CONFIG.espantable.avisoMinimo);
+});
+
+test('al pibe que tira basura lo corrés a escobazos si llegás antes de que tire', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 999;
+  e.y = 2;
+  e.eventos = [{ tipo: 'pibe', zona: 'vereda', suma: 18, objeto: 'vaso', lugar: 0.3, aviso: 1.5, avisoTotal: 3 }];
+  V.paso(e, 0.1, quieto);
+  assert.equal(e.pibesCorridos, 1);
+  assert.equal(e.perrosEspantados, 0);
+  assert.equal(e.recienEspantados.length, 1);
+  assert.equal(e.objetos.vereda.length, 0);
+});
+
+test('si no llegás, el pibe tira el vaso y queda en la vereda', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 999;
+  e.eventos = [{ tipo: 'pibe', zona: 'vereda', suma: 18, objeto: 'vaso', lugar: 0.3, aviso: 0.05, avisoTotal: 3 }];
+  V.paso(e, 0.1, quieto);
+  assert.equal(e.pibesCorridos, 0);
+  assert.deepEqual(e.objetos.vereda, [{ tipo: 'vaso', lugar: 0.3 }]);
+});
+
+test('el pibe da el mismo margen que el perro suelto para llegar', () => {
+  const e = V.crearEstado(5);
+  e.ultimaZonaEvento = 'casa';
+  let pibe = null;
+  for (let i = 0; i < 2000 && !pibe; i++) {
+    V.paso(e, 0.05, quieto);
+    e.problemas = { patio: 0, casa: 0, vereda: 0 };
+    pibe = e.eventos.find((ev) => ev.tipo === 'pibe');
+  }
+  assert.ok(pibe);
+  const { avisoInicial, avisoMinimo } = V.CONFIG.espantable;
+  assert.ok(pibe.avisoTotal <= avisoInicial && pibe.avisoTotal >= avisoMinimo);
+  assert.ok(pibe.avisoTotal > V.CONFIG.avisoEvento);
 });

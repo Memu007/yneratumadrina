@@ -9,9 +9,10 @@
     deterioro: { patio: 3, casa: 2, vereda: 1.2 },
     rampa: 75, // el deterioro suma su valor base cada 75 s (crecimiento lineal)
     avisoEvento: 2,
-    // Perro suelto: el aviso alcanza para reaccionar (~0.4 s) y caminar desde el patio
-    // hasta la vereda (2.2 s). Con el tiempo se acorta y desde el patio ya no se llega.
-    perroSolo: { avisoInicial: 3, avisoMinimo: 2, rampa: 90, llegada: 0.35 },
+    // Espantables (perro suelto, pibe que tira basura): el aviso alcanza para reaccionar
+    // (~0.4 s) y caminar del patio a la vereda (2.2 s). Con el tiempo se acorta y desde el
+    // patio ya no se llega. `llegada`: fracción del aviso en que terminan de entrar.
+    espantable: { avisoInicial: 3, avisoMinimo: 2, rampa: 90, llegada: 0.35 },
     avisoPerroDueno: 2.5,
     unidadMugre: 8, // cada 8 puntos de problema entra un objeto tirado en la zona
     intervaloMinimo: 2.5,
@@ -23,7 +24,7 @@
   // `peso`: qué tan seguido sale cada evento; el perro es la estrella.
   const EVENTOS = [
     { tipo: 'perro', zona: 'vereda', suma: 25, objeto: 'caca', peso: 2 },
-    { tipo: 'vecino', zona: 'vereda', suma: 18, objeto: 'vaso', peso: 1 },
+    { tipo: 'pibe', zona: 'vereda', suma: 18, objeto: 'vaso', peso: 1 },
     { tipo: 'vecino', zona: 'patio', suma: 18, objeto: 'bolsa', peso: 1.5 },
     { tipo: 'nietos', zona: 'casa', suma: 22, objeto: null, peso: 1.5 },
   ];
@@ -49,7 +50,8 @@
       ultimaZonaEvento: null,
       perdioPor: null,
       perrosEspantados: 0,
-      cacasLevantadas: 0, // las que levantó el dueño porque lo vio el viejo
+      cacasLevantadas: 0,
+      pibesCorridos: 0, // pibes que el viejo sacó a escobazos antes de que tiraran basura // las que levantó el dueño porque lo vio el viejo
       proximoPerroConDueno: null, // se sortea con el primer perro y después se alterna
       objetos: { patio: [], casa: [], vereda: [] }, // lo que quedó tirado, del más viejo al más nuevo
       // Lo ocurrido en el último paso, para que la pantalla reaccione (sonido, sacudón).
@@ -85,8 +87,8 @@
     return candidatos[candidatos.length - 1];
   }
 
-  function avisoPerroSolo(segundos) {
-    const { avisoInicial, avisoMinimo, rampa } = CONFIG.perroSolo;
+  function avisoEspantable(segundos) {
+    const { avisoInicial, avisoMinimo, rampa } = CONFIG.espantable;
     return Math.max(avisoMinimo, avisoInicial - segundos / rampa);
   }
 
@@ -98,7 +100,9 @@
       if (estado.proximoPerroConDueno === null) estado.proximoPerroConDueno = aleatorio(estado) < 0.5;
       e.conDueno = estado.proximoPerroConDueno;
       estado.proximoPerroConDueno = !e.conDueno;
-      e.aviso = e.conDueno ? CONFIG.avisoPerroDueno : avisoPerroSolo(estado.segundos);
+      e.aviso = e.conDueno ? CONFIG.avisoPerroDueno : avisoEspantable(estado.segundos);
+    } else if (e.tipo === 'pibe') {
+      e.aviso = avisoEspantable(estado.segundos);
     } else {
       e.aviso = CONFIG.avisoEvento;
     }
@@ -145,10 +149,13 @@
     const pendientes = [];
     for (const e of estado.eventos) {
       const viejoAhi = quieto && zonaViejo === e.zona;
-      const llego = 1 - e.aviso / e.avisoTotal >= CONFIG.perroSolo.llegada;
-      if (e.tipo === 'perro' && !e.conDueno && viejoAhi && llego) {
-        // Si el perro suelto llega y ve al viejo en la vereda, sale rajando sin hacer nada.
-        estado.perrosEspantados += 1;
+      const llego = 1 - e.aviso / e.avisoTotal >= CONFIG.espantable.llegada;
+      const espantable = (e.tipo === 'perro' && !e.conDueno) || e.tipo === 'pibe';
+      if (espantable && viejoAhi && llego) {
+        // Si el perro suelto o el pibe llegan y ven al viejo en la vereda, salen rajando
+        // (al pibe, a escobazos) sin ensuciar nada.
+        if (e.tipo === 'perro') estado.perrosEspantados += 1;
+        else estado.pibesCorridos += 1;
         estado.recienEspantados.push(e);
         continue;
       }
@@ -186,7 +193,7 @@
     return estado;
   }
 
-  const api = { ZONAS, CONFIG, EVENTOS, crearEstado, paso, zonaActual, intervaloEventos, avisoPerroSolo };
+  const api = { ZONAS, CONFIG, EVENTOS, crearEstado, paso, zonaActual, intervaloEventos, avisoEspantable };
   if (typeof module !== 'undefined') module.exports = api;
   else root.ViejoCasaLimpia = api;
 })(globalThis);
