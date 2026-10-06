@@ -1,0 +1,9 @@
+{
+  "name": "inera-sara",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Juegos baratos y rápidos al estilo moda rápida.",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

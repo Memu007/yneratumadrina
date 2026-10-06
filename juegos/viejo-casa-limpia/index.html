@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>El Viejo y su Casa Limpia — Inera Sara</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; overflow: hidden; touch-action: none; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="juego" aria-label="El Viejo y su Casa Limpia: tocá una zona para ir y mantené apretado para trabajar"></canvas>
+<script src="../../comun/lienzo.js"></script>
+<script src="logica.js"></script>
+<script>
+  const { ANCHO, ALTO } = Lienzo;
+  const V = ViejoCasaLimpia;
+  const CLAVE_RECORD = 'inera-sara-viejo-casa-limpia';
+  const canvas = document.getElementById('juego');
+  const ctx = Lienzo.crearLienzo(canvas);
+
+  const ALTO_ZONA = 170;
+  const FONDOS = { casa: '#f3e3c7', jardin: '#8fd16a', vereda: '#b9b9b9' };
+  const NOMBRES = { casa: 'Casa', jardin: 'Pasto', vereda: 'Vereda' };
+  const CAUSAS = { casa: '¡La casa es un chiquero!', jardin: '¡El pasto te tapó!', vereda: '¡La vereda da vergüenza!' };
+  const AVISOS = { perro: '🐕', vecino: '🙋', nietos: '👦' };
+  const HERRAMIENTAS = { casa: '🧹', jardin: '✂️', vereda: '🧹' };
+  const entrada = { zona: null, trabajar: false };
+  let estado = V.crearEstado(Date.now());
+  let record = Lienzo.leerRecord(CLAVE_RECORD);
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (estado.fase === 'fin') { estado = V.crearEstado(Date.now()); return; }
+    entrada.zona = Math.min(2, Math.floor(Lienzo.puntoLogico(canvas, e).y / ALTO_ZONA));
+    entrada.trabajar = true;
+  });
+  for (const tipo of ['pointerup', 'pointercancel', 'pointerleave']) {
+    canvas.addEventListener(tipo, () => { entrada.trabajar = false; });
+  }
+  const TECLAS_ZONA = { ArrowUp: -1, ArrowDown: 1 };
+  window.addEventListener('keydown', (e) => {
+    if (estado.fase === 'fin' && e.key === ' ') { estado = V.crearEstado(Date.now()); return; }
+    if (e.key in TECLAS_ZONA) entrada.zona = V.zonaActual(estado) + TECLAS_ZONA[e.key];
+    if (e.key === ' ') entrada.trabajar = true;
+  });
+  window.addEventListener('keyup', (e) => { if (e.key === ' ') entrada.trabajar = false; });
+
+  // Posiciones fijas de manchas para que no titilen cada cuadro.
+  const MANCHAS = Array.from({ length: 12 }, (_, i) => ({ x: 30 + ((i * 97) % 250), y: 40 + ((i * 53) % 110) }));
+
+  function dibujarZona(zona, i) {
+    const y0 = i * ALTO_ZONA;
+    const nivel = estado.problemas[zona];
+    ctx.fillStyle = FONDOS[zona];
+    ctx.fillRect(0, y0, ANCHO, ALTO_ZONA);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    if (zona === 'casa') {
+      ctx.font = '40px serif';
+      ctx.fillText('🏠', 300, y0 + 40);
+      const manchas = Math.round((nivel / 100) * MANCHAS.length);
+      ctx.fillStyle = 'rgba(90, 60, 30, 0.55)';
+      for (const m of MANCHAS.slice(0, manchas)) {
+        ctx.beginPath();
+        ctx.arc(m.x, y0 + m.y, 12, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (zona === 'jardin') {
+      const alto = 10 + (nivel / 100) * 140;
+      ctx.strokeStyle = '#2f7d1f';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let x = 6; x < ANCHO; x += 9) {
+        ctx.moveTo(x, y0 + ALTO_ZONA);
+        ctx.lineTo(x + Math.sin(x + performance.now() / 600) * 4, y0 + ALTO_ZONA - alto * (0.8 + ((x * 7) % 5) / 20));
+      }
+      ctx.stroke();
+    } else {
+      const basuras = Math.round((nivel / 100) * MANCHAS.length);
+      ctx.font = '24px serif';
+      MANCHAS.slice(0, basuras).forEach((m, k) => ctx.fillText(k % 3 === 0 ? '💩' : '🥤', m.x, y0 + m.y));
+    }
+
+    // Barra de peligro de la zona.
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(ANCHO - 26, y0 + 12, 14, ALTO_ZONA - 24);
+    ctx.fillStyle = nivel > 75 ? '#e02020' : nivel > 50 ? '#f0a000' : '#2a9d3a';
+    const h = ((ALTO_ZONA - 24) * nivel) / 100;
+    ctx.fillRect(ANCHO - 26, y0 + ALTO_ZONA - 12 - h, 14, h);
+    ctx.fillStyle = '#222';
+    ctx.font = 'bold 16px system-ui';
+    ctx.textAlign = 'left';
+    ctx.fillText(NOMBRES[zona], 10, y0 + 16);
+  }
+
+  function dibujarEventos() {
+    ctx.font = '36px serif';
+    ctx.textAlign = 'center';
+    for (const e of estado.eventos) {
+      const i = V.ZONAS.indexOf(e.zona);
+      // El visitante cruza la zona mientras dura el aviso.
+      const avance = 1 - e.aviso / V.CONFIG.avisoEvento;
+      ctx.fillText(AVISOS[e.tipo], 20 + avance * (ANCHO - 80), i * ALTO_ZONA + ALTO_ZONA / 2);
+    }
+  }
+
+  function dibujarViejo() {
+    const cy = estado.y * ALTO_ZONA + ALTO_ZONA / 2;
+    const zona = V.ZONAS[V.zonaActual(estado)];
+    const trabajando = entrada.trabajar && Math.abs(estado.y - V.zonaActual(estado)) < 0.05;
+    const bamboleo = trabajando ? Math.sin(performance.now() / 70) * 8 : 0;
+    ctx.font = '54px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('👴', 140, cy);
+    if (trabajando) {
+      ctx.font = '32px serif';
+      ctx.fillText(HERRAMIENTAS[zona], 180 + bamboleo, cy + 14);
+    }
+  }
+
+  function dibujarHud() {
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0, 3 * ALTO_ZONA, ANCHO, ALTO - 3 * ALTO_ZONA);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 22px system-ui';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`⏱ ${Math.floor(estado.segundos)}s`, 16, ALTO - 90);
+    ctx.textAlign = 'right';
+    ctx.fillText(`Récord ${record}s`, ANCHO - 16, ALTO - 90);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '13px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('Tocá una zona para ir · mantené para trabajar', ANCHO / 2, ALTO - 40);
+    ctx.fillText('Que nada llegue al rojo', ANCHO / 2, ALTO - 20);
+  }
+
+  function dibujarFin() {
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(0, 0, ANCHO, ALTO);
+    Lienzo.textoCentrado(ctx, CAUSAS[estado.perdioPor], 230, 26, '#fff');
+    Lienzo.textoCentrado(ctx, `Aguantaste ${Math.floor(estado.segundos)} segundos`, 280, 22, '#ffd34d');
+    Lienzo.textoCentrado(ctx, `Récord: ${record}s`, 315, 18, '#ccc');
+    Lienzo.textoCentrado(ctx, 'Tocá para jugar de nuevo', 400, 18, '#fff');
+  }
+
+  Lienzo.bucle((dt) => {
+    const estabaJugando = estado.fase === 'jugando';
+    V.paso(estado, dt, entrada);
+    if (estabaJugando && estado.fase === 'fin') {
+      record = Lienzo.guardarRecord(CLAVE_RECORD, Math.floor(estado.segundos));
+    }
+    V.ZONAS.forEach(dibujarZona);
+    dibujarEventos();
+    dibujarViejo();
+    dibujarHud();
+    if (estado.fase === 'fin') dibujarFin();
+  });
+</script>
+</body>
+</html>

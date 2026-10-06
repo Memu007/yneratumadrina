@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Limpiavidrios — Inera Sara</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; overflow: hidden; touch-action: none; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="juego" aria-label="Limpiavidrios: tocá una ventana para ir y mantené apretado para limpiar"></canvas>
+<script src="../../comun/lienzo.js"></script>
+<script src="logica.js"></script>
+<script>
+  const { ANCHO, ALTO } = Lienzo;
+  const L = Limpiavidrios;
+  const CLAVE_RECORD = 'inera-sara-limpiavidrios';
+  const canvas = document.getElementById('juego');
+  const ctx = Lienzo.crearLienzo(canvas);
+
+  const ANCHO_COL = ANCHO / L.COLUMNAS;
+  const Y_ANDAMIO = 400;
+  const entrada = { columna: null, limpiar: false };
+  let estado = L.crearEstado(Date.now());
+  let record = Lienzo.leerRecord(CLAVE_RECORD);
+  let desplazamiento = 0; // animación del edificio al bajar de piso
+  let pisoMostrado = estado.piso;
+
+  function reiniciar() {
+    estado = L.crearEstado(Date.now());
+    pisoMostrado = estado.piso;
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (estado.fase === 'fin') { reiniciar(); return; }
+    const p = Lienzo.puntoLogico(canvas, e);
+    entrada.columna = Math.floor(p.x / ANCHO_COL);
+    entrada.limpiar = true;
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!entrada.limpiar) return;
+    entrada.columna = Math.floor(Lienzo.puntoLogico(canvas, e).x / ANCHO_COL);
+  });
+  for (const tipo of ['pointerup', 'pointercancel', 'pointerleave']) {
+    canvas.addEventListener(tipo, () => { entrada.limpiar = false; });
+  }
+  const TECLAS_COL = { ArrowLeft: -1, ArrowRight: 1 };
+  window.addEventListener('keydown', (e) => {
+    if (estado.fase === 'fin' && e.key === ' ') { reiniciar(); return; }
+    if (e.key in TECLAS_COL) entrada.columna = L.columnaActual(estado) + TECLAS_COL[e.key];
+    if (e.key === ' ') entrada.limpiar = true;
+  });
+  window.addEventListener('keyup', (e) => { if (e.key === ' ') entrada.limpiar = false; });
+
+  function dibujarEdificio() {
+    ctx.fillStyle = '#87c5ff';
+    ctx.fillRect(0, 0, ANCHO, ALTO);
+    ctx.fillStyle = '#c9b8a6';
+    ctx.fillRect(10, 0, ANCHO - 20, ALTO);
+    // Pisos de arriba (de donde cae lo malo), con desplazamiento al bajar.
+    for (let fila = -1; fila < 4; fila++) {
+      // Al bajar, el edificio sube un piso entero en pantalla.
+      const y = fila * 150 + 20 + (desplazamiento > 0 ? desplazamiento - 150 : 0);
+      const actual = fila === 2;
+      for (let c = 0; c < L.COLUMNAS; c++) {
+        const x = c * ANCHO_COL + 18;
+        ctx.fillStyle = '#5d4a3a';
+        ctx.fillRect(x - 4, y - 4, ANCHO_COL - 28, 118);
+        ctx.fillStyle = '#bfe3ff';
+        ctx.fillRect(x, y, ANCHO_COL - 36, 110);
+        if (actual && desplazamiento === 0) {
+          const sucio = estado.vidrios[c] / 100;
+          ctx.fillStyle = `rgba(110, 85, 40, ${0.15 + sucio * 0.8})`;
+          ctx.fillRect(x, y, ANCHO_COL - 36, 110 * Math.min(1, sucio + 0.1));
+          if (estado.vidrios[c] <= 0) {
+            ctx.font = '28px serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('✨', x + (ANCHO_COL - 36) / 2, y + 55);
+          }
+        }
+      }
+    }
+  }
+
+  function dibujarPeligros() {
+    for (const p of estado.peligros) {
+      const cx = p.columna * ANCHO_COL + ANCHO_COL / 2;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if (p.aviso > 0) {
+        // Aviso: ventana que se abre o pájaro que pasa.
+        ctx.font = '34px serif';
+        ctx.fillText(p.tipo === 'basura' ? '🪟' : '🐦', cx, 70);
+        ctx.font = 'bold 26px system-ui';
+        ctx.fillStyle = '#d00';
+        ctx.fillText('!', cx + 26, 52);
+      } else {
+        ctx.font = '30px serif';
+        ctx.fillText(p.tipo === 'basura' ? '🗑️' : '💩', cx, 70 + p.y * (Y_ANDAMIO - 70));
+      }
+    }
+  }
+
+  function dibujarAndamio() {
+    const cx = estado.x * ANCHO_COL + ANCHO_COL / 2;
+    if (estado.golpe > 0 && Math.floor(estado.golpe * 10) % 2 === 0) return;
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 40, 0); ctx.lineTo(cx - 40, Y_ANDAMIO);
+    ctx.moveTo(cx + 40, 0); ctx.lineTo(cx + 40, Y_ANDAMIO);
+    ctx.stroke();
+    ctx.fillStyle = '#f2a900';
+    ctx.fillRect(cx - 50, Y_ANDAMIO + 20, 100, 14);
+    ctx.font = '44px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🧑‍🔧', cx, Y_ANDAMIO - 6);
+    if (entrada.limpiar) ctx.fillText('🧽', cx + 26, Y_ANDAMIO - 40 + Math.sin(performance.now() / 50) * 6);
+  }
+
+  function dibujarHud() {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, ALTO - 110, ANCHO, 110);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 20px system-ui';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(`Piso ${estado.piso}`, 16, ALTO - 76);
+    ctx.fillText('❤️'.repeat(Math.max(0, estado.vidas)), 16, ALTO - 44);
+    ctx.textAlign = 'right';
+    ctx.fillText(`${estado.puntos} pts`, ANCHO - 16, ALTO - 76);
+    ctx.fillStyle = estado.tiempo < 6 ? '#ff5050' : '#fff';
+    ctx.fillText(`⏱ ${Math.max(0, Math.ceil(estado.tiempo))}s`, ANCHO - 16, ALTO - 44);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '13px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('Tocá una ventana para ir · mantené para limpiar', ANCHO / 2, ALTO - 14);
+  }
+
+  function dibujarFin() {
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(0, 0, ANCHO, ALTO);
+    Lienzo.textoCentrado(ctx, estado.vidas <= 0 ? '¡Te bajaron!' : '¡Se acabó el tiempo!', 230, 30, '#fff');
+    Lienzo.textoCentrado(ctx, `${estado.puntos} puntos · piso ${estado.piso}`, 280, 22, '#ffd34d');
+    Lienzo.textoCentrado(ctx, `Récord: ${record}`, 315, 18, '#ccc');
+    Lienzo.textoCentrado(ctx, 'Tocá para jugar de nuevo', 400, 18, '#fff');
+  }
+
+  Lienzo.bucle((dt) => {
+    const estabaJugando = estado.fase === 'jugando';
+    if (desplazamiento > 0) {
+      desplazamiento = Math.max(0, desplazamiento - 400 * dt);
+    } else {
+      L.paso(estado, dt, entrada);
+    }
+    if (estado.piso !== pisoMostrado) {
+      pisoMostrado = estado.piso;
+      desplazamiento = 150; // el andamio baja un piso
+    }
+    if (estabaJugando && estado.fase === 'fin') record = Lienzo.guardarRecord(CLAVE_RECORD, estado.puntos);
+    dibujarEdificio();
+    dibujarPeligros();
+    dibujarAndamio();
+    dibujarHud();
+    if (estado.fase === 'fin') dibujarFin();
+  });
+</script>
+</body>
+</html>
