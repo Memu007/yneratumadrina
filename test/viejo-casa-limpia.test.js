@@ -143,3 +143,53 @@ test('antes del minuto nunca caen dos eventos seguidos en la misma zona', () => 
     }
   }
 });
+
+test('sin perro no hay caca: lo que se ensucia solo no deja objetos', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 999;
+  for (let i = 0; i < 200; i++) V.paso(e, 0.1, quieto);
+  assert.equal(e.objetos.vereda.length, 0);
+});
+
+test('el perro deja una caca en el lugar donde se agachó y barriendo se levanta', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 999;
+  e.problemas.vereda = 0;
+  e.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, objeto: 'caca', lugar: 0.4, aviso: 0.05, conDueno: true }];
+  V.paso(e, 0.1, quieto);
+  assert.deepEqual(e.objetos.vereda, [{ tipo: 'caca', lugar: 0.4 }]);
+  e.y = 2;
+  for (let i = 0; i < 20; i++) V.paso(e, 0.1, { zona: null, trabajar: true });
+  assert.equal(e.objetos.vereda.length, 0);
+});
+
+test('al perro con dueño no se lo espanta: el dueño putea una sola vez y caga igual', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 999;
+  e.y = 2;
+  e.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, objeto: 'caca', lugar: 0.5, aviso: 0.3, conDueno: true }];
+  V.paso(e, 0.1, { zona: null, trabajar: true });
+  assert.equal(e.recienPuteadas.length, 1);
+  assert.equal(e.perrosEspantados, 0);
+  V.paso(e, 0.1, { zona: null, trabajar: true });
+  assert.equal(e.recienPuteadas.length, 0);
+  V.paso(e, 0.2, { zona: null, trabajar: true });
+  assert.equal(e.recienCaidos.length, 1);
+});
+
+test('el perro suelto caga más rápido que el que viene con dueño', () => {
+  let solos = 0;
+  let conDueno = 0;
+  for (let semilla = 1; semilla <= 60; semilla++) {
+    const e = V.crearEstado(semilla);
+    e.proximoEvento = 0;
+    e.ultimaZonaEvento = 'casa';
+    V.paso(e, 0.01, quieto);
+    const ev = e.eventos[0];
+    if (ev.tipo !== 'perro') continue;
+    if (ev.conDueno) { conDueno++; assert.equal(ev.avisoTotal, V.CONFIG.avisoEvento); }
+    else { solos++; assert.equal(ev.avisoTotal, V.CONFIG.avisoPerroSolo); }
+  }
+  assert.ok(solos > 0 && conDueno > 0);
+  assert.ok(V.CONFIG.avisoPerroSolo < V.CONFIG.avisoEvento);
+});

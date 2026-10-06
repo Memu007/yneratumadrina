@@ -34,7 +34,6 @@
     { y: 1.5, px: 125, py: 350 },
     { y: 2, px: 165, py: 500 },
   ];
-  const AVISO = V.CONFIG.avisoEvento;
 
   const CAUSAS = {
     patio: 'El pasto te tapó.',
@@ -46,20 +45,25 @@
     casa: '¿Vas a dejar que ganen los nietos?',
     vereda: '¿Vas a dejar que gane el perro?',
   };
+  // Lo que dice el viejo cuando le cae algo, según quién fue.
   const FRASES_EVENTO = {
-    'perro-vereda': ['¡Otra vez el perro de la vecina!', '¡Levantala, che!'],
-    'vecino-vereda': ['A ver si pasan menos y ensucian menos.', 'Esto antes no pasaba.'],
-    'vecino-patio': ['¡Eh! ¡Que no es un basural!', 'Esto antes no pasaba.'],
-    'nietos-casa': ['Nietos, sí. Chiqueros, no.', 'Me van a matar a disgustos.'],
+    'perro-solo': ['¡La pucha! ¡Otra vez!', '¡Perro del diablo!', '¡Pago los impuestos para esto!'],
+    'perro-dueno': ['¡Levantala, sinvergüenza!', '¡Y encima no la levanta!', '¡Hay que ser caradura!'],
+    'vecino-vereda': ['¡Mal educado!', '¡Esta juventud!', '¡Te vi, eh! ¡Te vi!'],
+    'vecino-patio': ['¡Eh! ¡Que no es un basural!', '¡Lo voy a denunciar a la municipalidad!'],
+    'nietos-casa': ['¡Las zapatillas, chicos!', '¡Recién lo había limpiado!', 'Nietos, sí. Chiqueros, no.'],
   };
   const FRASES_SUELTAS = [
-    'Yo a tu edad ya tenía la vereda baldeada.',
+    '¡Ay, mi ciática!',
+    'En mi época había respeto.',
+    '¡Me tienen podrido!',
+    '¡Uno no puede descansar tranquilo!',
     '¿Quién va a cortar esto? ¿El Papa?',
-    'Mirá cómo está el pasto, parece Misiones.',
-    'Me duele la cadera, no la dignidad.',
-    'Vamos, viejo, que la casa no se limpia sola.',
+    'Yo a tu edad tenía la vereda baldeada.',
   ];
-  const FRASES_ESPANTAR = ['¡Fuera de acá!', '¡Ni se te ocurra!', '¡Andá a hacer eso a otro lado!'];
+  const FRASES_ESPANTAR = ['¡Juira, perro!', '¡Fuera, chucho!', '¡Juira de acá!', '¡Ni se te ocurra, sabandija!'];
+  const PUTEADAS_DUENO = ['¡Qué te metés, viejo choto!', '¡Es vereda pública, abuelo!', '¡Andá a regar las plantas!', '¡Calmate, jubilado!'];
+  const RESPUESTAS_VIEJO = ['¡Sinvergüenza!', '¡Maleducado!', '¡Le voy a hacer la denuncia!'];
 
   const entrada = { zona: null, trabajar: false };
   let estado = V.crearEstado(Date.now());
@@ -128,6 +132,7 @@
     plop: () => tono('sine', 320, 70, 0.22, 0.5),
     fuera: () => { tono('square', 520, 760, 0.1, 0.08); setTimeout(() => tono('square', 760, 520, 0.12, 0.08), 110); },
     perder: () => tono('triangle', 440, 90, 0.9, 0.3),
+    ladrido: () => { tono('square', 380, 240, 0.08, 0.07); setTimeout(() => tono('square', 400, 250, 0.08, 0.07), 140); },
   };
   function vibrar(ms) {
     try { navigator.vibrate && navigator.vibrate(ms); } catch { /* sin vibración */ }
@@ -360,7 +365,26 @@
 
   // ---------- Escenario ----------
   // Posiciones fijas para la mugre, así no titila cada cuadro.
-  const MUGRE_VEREDA = [[240, 495], [300, 470], [60, 505], [205, 465], [275, 512], [95, 470], [320, 500], [40, 470], [250, 380], [70, 395], [300, 395], [180, 510]];
+  // Hojas secas: la mugre que junta la vereda sola, sin que nadie tire nada.
+  const HOJAS = [[240, 495], [300, 470], [60, 505], [205, 465], [275, 512], [95, 470], [190, 500], [40, 470], [250, 380], [70, 395], [300, 395], [160, 510]];
+  // Dónde quedó tirado un objeto: `lugar` (0..1) lo decide la lógica al crear el evento.
+  function posicionObjeto(zona, lugar) {
+    const fila = (lugar * 997) % 1;
+    if (zona === 'patio') return { x: 60 + lugar * 220, y: 75 + fila * 55 };
+    return { x: 40 + lugar * 240, y: 466 + fila * 46 };
+  }
+  function dibujarObjetos(zona) {
+    for (const o of estado.objetos[zona]) {
+      const { x, y } = posicionObjeto(zona, o.lugar);
+      if (o.tipo === 'caca') dibujarCaca(x, y);
+      else if (o.tipo === 'vaso') dibujarBasura(x, y, 1);
+      else dibujarBolsa(x, y);
+    }
+  }
+  function dibujarHoja(x, y) {
+    ctx.fillStyle = '#c98b2b';
+    ctx.beginPath(); ctx.ellipse(x, y, 6, 3, 0.6, 0, Math.PI * 2); ctx.fill();
+  }
   const PISADAS_FIJAS = Array.from({ length: 14 }, (_, i) => [40 + ((i * 83) % 280), 225 + ((i * 37) % 95)]);
 
   function dibujarPatio(nivel) {
@@ -390,6 +414,7 @@
       }
     }
     ctx.stroke();
+    dibujarObjetos('patio');
     ctx.fillStyle = '#b5835a'; // medianera con el vecino
     ctx.fillRect(ANCHO - 12, 0, 12, 150);
   }
@@ -469,8 +494,9 @@
     ctx.beginPath(); ctx.moveTo(0, 481); ctx.lineTo(ANCHO, 481); ctx.stroke();
     ctx.fillStyle = '#8a8a8a';
     ctx.fillRect(0, 522, ANCHO, 18);
-    const mugre = Math.round((nivel / 100) * MUGRE_VEREDA.length);
-    MUGRE_VEREDA.slice(0, mugre).forEach(([x, y], k) => (k % 3 === 0 ? dibujarCaca(x, y) : dibujarBasura(x, y, k)));
+    const hojas = Math.max(0, Math.floor(nivel / V.CONFIG.unidadMugre) - estado.objetos.vereda.length);
+    HOJAS.slice(0, hojas).forEach(([x, y]) => dibujarHoja(x, y));
+    dibujarObjetos('vereda');
   }
 
   function dibujarAlerta(zona) {
@@ -519,7 +545,8 @@
     for (const e of estado.eventos) {
       if (!conocidos.has(e)) {
         conocidos.add(e);
-        actores.push({ e, fase: 'entrando', s: 0, ninos: [] });
+        actores.push({ e, fase: 'entrando', s: 0, ninos: [], puteada: null });
+        if (e.tipo === 'perro' && !e.conDueno) SONIDOS.ladrido();
       }
     }
     for (const a of actores) {
@@ -531,44 +558,66 @@
   }
 
   function progreso(a) {
-    return limitar(1 - a.e.aviso / AVISO);
+    return limitar(1 - a.e.aviso / a.e.avisoTotal);
   }
 
   // Devuelve una lista de { y, dibujar } para ordenar por profundidad con el viejo.
   function figurasActor(a) {
     const p = progreso(a);
     const tipo = `${a.e.tipo}-${a.e.zona}`;
-    if (tipo === 'perro-vereda') {
-      // Un vecino pasea al perro; el perro frena, se agacha y el dueño silba mirando para otro lado.
+    if (tipo === 'perro-vereda' && !a.e.conDueno) {
+      // Perro suelto: entra corriendo, olfatea y se agacha. Si llegás antes, se escapa.
+      const destino = posicionObjeto('vereda', a.e.lugar);
+      const desdeIzquierda = (a.e.lugar * 7) % 1 < 0.5;
+      const dir = desdeIzquierda ? 1 : -1;
+      const llegada = destino.x + 18 * dir; // la cola queda justo donde cae la caca
       let px;
-      let duenoX;
-      let corriendo = false;
+      let mira = dir;
+      let corriendo = true;
       if (a.fase === 'entrando') {
-        px = lerp(-60, 255, suave(limitar(p / 0.6)));
-        duenoX = px - 58;
+        px = lerp(desdeIzquierda ? -40 : ANCHO + 40, llegada, suave(limitar(p / 0.4)));
+        corriendo = p < 0.4;
       } else if (a.fase === 'saliendo') {
-        px = 255 + a.s * 90;
-        duenoX = px - 58;
+        px = llegada + a.s * 120 * dir;
       } else {
-        corriendo = true;
-        px = 255 + a.s * 340;
-        duenoX = 197 + a.s * 230;
+        mira = -dir;
+        px = llegada - a.s * 380 * dir;
       }
+      const olfatea = a.fase === 'entrando' && p >= 0.4 && p < 0.65;
+      const agachado = a.fase === 'entrando' && p >= 0.65;
+      return [{ y: destino.y, dibujar: () => {
+        dibujarPerro(px, destino.y, { agachado, corriendo, dir: mira });
+        if (olfatea) {
+          ctx.fillStyle = '#333';
+          ctx.font = 'bold 14px system-ui';
+          ctx.textAlign = 'center';
+          ctx.fillText('snif', px + 24 * mira, destino.y - 38);
+        }
+      } }];
+    }
+    if (tipo === 'perro-vereda') {
+      // Perro con dueño: frena, se agacha y el dueño silba. Si el viejo está, el dueño lo putea.
+      const destino = posicionObjeto('vereda', a.e.lugar);
+      const llegada = destino.x + 18;
+      let px;
+      if (a.fase === 'entrando') px = lerp(-60, llegada, suave(limitar(p / 0.6)));
+      else px = llegada + a.s * 90;
+      const duenoX = px - 58;
       const agachado = a.fase === 'entrando' && p > 0.65;
       const caminando = a.fase !== 'entrando' || p < 0.6;
       return [
-        { y: 478, dibujar: () => {
-          dibujarPersona(duenoX, 478, { pelo: '#2d3436', remera: '#00b894', caminando, corriendo });
-          linea(duenoX + 14, 442, px + 10, 482, 1.5, '#c0392b'); // correa
-          if (agachado) {
+        { y: destino.y - 22, dibujar: () => {
+          dibujarPersona(duenoX, destino.y - 22, { pelo: '#2d3436', remera: '#00b894', caminando, brazoArriba: !!a.puteada });
+          linea(duenoX + 14, destino.y - 58, px + 10, destino.y - 18, 1.5, '#c0392b'); // correa
+          if (agachado && !a.puteada) {
             ctx.fillStyle = '#333';
             ctx.font = '16px serif';
             ctx.textAlign = 'center';
-            ctx.fillText('♪', duenoX + 8 + Math.sin(reloj * 4) * 3, 392 - (reloj * 20) % 14);
+            ctx.fillText('♪', duenoX + 8 + Math.sin(reloj * 4) * 3, destino.y - 108 - (reloj * 20) % 14);
           }
-          if (a.fase === 'huyendo' && a.s < 1.2) dibujarGlobo(duenoX, 380, '¡Perdón, don!');
+          if (a.puteada && reloj < a.puteadaHasta) dibujarGlobo(duenoX, destino.y - 150, a.puteada);
         } },
-        { y: 500, dibujar: () => dibujarPerro(px, 500, { agachado, corriendo }) },
+        { y: destino.y, dibujar: () => dibujarPerro(px, destino.y, { agachado }) },
       ];
     }
     if (tipo === 'vecino-vereda') {
@@ -577,7 +626,8 @@
       const figuras = [{ y: 462, dibujar: () => dibujarPersona(x, 462, { pelo: '#999', remera: '#2e86de', caminando: true, dir: -1, brazoArriba: p > 0.75 && a.fase === 'entrando' }) }];
       if (a.fase === 'entrando' && p > 0.75) {
         const t = (p - 0.75) / 0.25;
-        figuras.push({ y: 999, dibujar: () => dibujarBasura(lerp(x - 14, 240, t), lerp(390, 495, t) - Math.sin(t * Math.PI) * 50, 1) });
+        const cae = posicionObjeto('vereda', a.e.lugar);
+        figuras.push({ y: 999, dibujar: () => dibujarBasura(lerp(x - 14, cae.x, t), lerp(390, cae.y, t) - Math.sin(t * Math.PI) * 50, 1) });
       }
       return figuras;
     }
@@ -592,7 +642,8 @@
       } }];
       if (a.fase === 'entrando' && p > 0.6) {
         const t = (p - 0.6) / 0.4;
-        figuras.push({ y: 999, dibujar: () => dibujarBolsa(lerp(x - 10, 250, t), lerp(30, 112, t) - Math.sin(t * Math.PI) * 45) });
+        const cae = posicionObjeto('patio', a.e.lugar);
+        figuras.push({ y: 999, dibujar: () => dibujarBolsa(lerp(x - 10, cae.x, t), lerp(30, cae.y, t) - Math.sin(t * Math.PI) * 45) });
       }
       return figuras;
     }
@@ -652,7 +703,7 @@
     ctx.font = '13px system-ui';
     ctx.textAlign = 'center';
     ctx.fillText('Tocá una zona para ir · mantené para trabajar', ANCHO / 2, 606);
-    ctx.fillText('Barriendo la vereda, el perro no se anima', ANCHO / 2, 626);
+    ctx.fillText('Al perro suelto lo espantás si llegás antes', ANCHO / 2, 626);
   }
 
   function dibujarFin() {
@@ -691,11 +742,20 @@
     }
     estabaCaminando = caminando;
 
+    for (const e of estado.recienPuteadas) {
+      const actor = actores.find((a) => a.e === e);
+      if (actor) {
+        actor.puteada = azar(PUTEADAS_DUENO);
+        actor.puteadaHasta = reloj + 2.4;
+      }
+    }
     for (const e of estado.recienCaidos) {
       sacudon = 0.2;
       SONIDOS.plop();
       vibrar(30);
-      decir(azar(FRASES_EVENTO[`${e.tipo}-${e.zona}`]));
+      if (e.tipo !== 'perro') decir(azar(FRASES_EVENTO[`${e.tipo}-${e.zona}`]));
+      else if (e.testigo) decir(azar(RESPUESTAS_VIEJO));
+      else decir(azar(FRASES_EVENTO[e.conDueno ? 'perro-dueno' : 'perro-solo']));
     }
     for (const e of estado.recienEspantados) {
       SONIDOS.fuera();
