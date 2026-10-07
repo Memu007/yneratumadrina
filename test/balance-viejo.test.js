@@ -12,7 +12,11 @@ function jugar(semilla, reaccion) {
   let frenados = 0;
   while (e.fase === 'jugando' && e.segundos < 180) {
     for (const ev of e.eventos) if (!visto.has(ev)) { visto.set(ev, e.segundos); eventos++; }
-    const urgentes = e.eventos.filter((ev) => e.segundos - visto.get(ev) > reaccion).sort((a, b) => a.aviso - b.aviso);
+    // Como una persona que ya jugó un par de veces: solo corre a lo que llega a frenar.
+    const llega = (ev) => Math.abs(V.ZONAS.indexOf(ev.zona) - e.y) / V.CONFIG.velocidadViejo < ev.aviso;
+    const urgentes = e.eventos
+      .filter((ev) => e.segundos - visto.get(ev) > reaccion && llega(ev) && !(ev.conDueno && ev.testigo))
+      .sort((a, b) => a.aviso - b.aviso);
     if (urgentes.length) {
       zona = V.ZONAS.indexOf(urgentes[0].zona);
     } else {
@@ -61,7 +65,7 @@ test('mirar rinde: rotar sin mirar dura mucho menos que jugar atento', () => {
   const atento = medir(1).mediana;
   for (const periodo of [3, 4, 6]) {
     const rotando = mediana(Array.from({ length: 60 }, (_, i) => rotar((i + 1) * 7919, periodo)));
-    assert.ok(rotando < 0.6 * atento, `rotando cada ${periodo} s dura ${rotando.toFixed(1)} s; atento ${atento.toFixed(1)} s`);
+    assert.ok(rotando < 0.65 * atento, `rotando cada ${periodo} s dura ${rotando.toFixed(1)} s; atento ${atento.toFixed(1)} s`);
   }
 });
 

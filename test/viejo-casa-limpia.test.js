@@ -349,9 +349,10 @@ test('cuando el perro caga aparece la caca, no hojas que nadie tiró', () => {
   assert.equal(e.objetos.vereda.length, 1);
   assert.equal(V.hojasSueltas(e), 0);
   // La vereda se sigue ensuciando sola de a poco: ahí sí aparecen hojas.
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 900; i++) {
     V.paso(e, 0.1, quieto);
     e.problemas.patio = 0; // que no pierda por el pasto mientras tanto
+    e.problemas.casa = 0;
   }
   assert.equal(e.fase, 'jugando');
   assert.ok(V.hojasSueltas(e) > 0);

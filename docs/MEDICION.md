@@ -20,3 +20,4 @@ en cada revisión.
 |---|---|---|---|---|---|---|
 | 2026-10-07 | Antes de retocar la dificultad | Balance que oscilaba entre muy difícil y muy fácil | 4 (no tocar margen de frenado, bajar sobrante, prueba de rotación antes de ajustar, medir frenados del que rota) | 4 | Sí: cambió la palanca (sobrante y asimetría, no el margen) | 0 |
 | 2026-10-07 | Antes de dar por cerrado el balance | Efectos de duplicar lo que ensucian los eventos | 3 (hojas fantasma, medir el arranque, cómo informarlo) | 3 | Sí: hojas fantasma reproducidas y arregladas; el arranque se midió y no hizo falta cambiarlo | 0 |
+| 2026-10-07 | Ajuste trabado: bajar barras devolvía ventaja a rotar | Barras demasiado rápidas | 4 (umbral 0.6 era una suposición, palanca de frecuencia, suavizar la barra, D2 de eventos lejos del viejo como último recurso) | 3 (el D2 no hizo falta) | Sí: la frecuencia destrabó el ajuste | 0 |
