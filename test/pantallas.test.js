@@ -21,5 +21,9 @@ for (const { carpeta, alias } of JUEGOS) {
     for (const [, nombre] of html.matchAll(new RegExp(`\\b${alias}\\.(\\w+)`, 'g'))) {
       assert.ok(nombre in logica, `${alias}.${nombre} no existe`);
     }
+    // Ajustes anidados, como V.CONFIG.espantable.llegada.
+    for (const [, grupo, clave] of html.matchAll(new RegExp(`\\b${alias}\\.CONFIG\\.(\\w+)\\.(\\w+)`, 'g'))) {
+      assert.ok(clave in logica.CONFIG[grupo], `${alias}.CONFIG.${grupo}.${clave} no existe`);
+    }
   });
 }

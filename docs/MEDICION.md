@@ -12,6 +12,7 @@ en cada revisión.
 | Fecha | Qué se revisó | Modelo y esfuerzo | Hallazgos | Reproducidos | Nuevos |
 |---|---|---|---|---|---|
 | 2026-10-06 | Diseño de El Viejo (asesoría, no revisión) | Fable | 5 mejoras + balance | 5 | 5 |
+| 2026-10-07 | El Viejo completo: cuelgues, récord, celular | Sonnet, esfuerzo por defecto | 7 (5 + 2 sospechas) | 7 | 7 |
 
 ## Consejero
 

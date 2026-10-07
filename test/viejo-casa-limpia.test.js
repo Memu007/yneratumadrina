@@ -317,3 +317,24 @@ test('el primer evento es un perro y nunca pasan más de tres eventos sin perro'
     }
   }
 });
+
+test('cruzar una zona caminando no cuenta como estar ahí', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 999;
+  e.y = 0.97; // viene del patio caminando hacia la vereda: en este paso pasa por la casa
+  e.eventos = [{ tipo: 'nietos', zona: 'casa', suma: 22, objeto: null, lugar: 0.5, aviso: 1.5, avisoTotal: 3 }];
+  V.paso(e, 1 / 30, { zona: 2, trabajar: true });
+  assert.ok(e.y > 0.97 && e.y < 1.05);
+  assert.equal(e.zapatillasAfuera, 0);
+  assert.equal(e.eventos.length, 1);
+});
+
+test('el dueño no ve al viejo antes de terminar de entrar', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 999;
+  e.y = 2;
+  e.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, objeto: 'caca', lugar: 0.5, aviso: 2.4, avisoTotal: 2.5, conDueno: true, testigo: false }];
+  V.paso(e, 0.05, quieto);
+  assert.equal(e.recienPuteadas.length, 0);
+  assert.equal(e.eventos[0].testigo, false);
+});
