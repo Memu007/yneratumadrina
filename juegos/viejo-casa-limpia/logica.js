@@ -6,12 +6,14 @@
     velocidadViejo: 0.9, // zonas por segundo: el viejo es lento a propósito
     velocidadTrabajo: 30, // problema quitado por segundo
     // Cuánto empeora cada zona por segundo al comienzo.
-    deterioro: { patio: 3, casa: 2, vereda: 1.2 },
-    rampa: 100, // el deterioro suma su valor base cada 100 s (crecimiento lineal)
+    // Muy desparejo a propósito: el pasto se come todo y la vereda casi no se ensucia sola.
+    // Repartir el tiempo parejo (rotar sin mirar) pierde; hay que mirar qué necesita cada zona.
+    deterioro: { patio: 5, casa: 1.2, vereda: 0.4 },
+    rampa: 110, // el deterioro suma su valor base cada 110 s (crecimiento lineal)
     avisoEvento: 2,
     // Lo que se frena llegando a tiempo: al principio el aviso alcanza para reaccionar con
-    // calma (~1 s) y caminar una zona (1.1 s); con el tiempo se acorta. Ajustado con un bot
-    // que tarda 1 s en reaccionar: frena ~60% y dura ~65 s (test/balance-viejo.test.js).
+    // calma (~1 s) y caminar una zona (1.1 s); con el tiempo se acorta. Ajustado con bots
+    // (test/balance-viejo.test.js): atento dura ~45 s y frena ~60%; rotando sin mirar, ~25 s.
     // `llegada`: fracción del aviso en que terminan de entrar.
     espantable: { avisoInicial: 2.8, avisoMinimo: 1.8, rampa: 90, llegada: 0.35 },
     avisoPerroDueno: 2.5,
@@ -28,10 +30,11 @@
   // `objeto` es lo que queda tirado en la zona; sin perro no hay caca.
   // `peso`: qué tan seguido sale cada evento; el perro es la estrella.
   const EVENTOS = [
-    { tipo: 'perro', zona: 'vereda', suma: 25, objeto: 'caca', peso: 2 },
-    { tipo: 'pibe', zona: 'vereda', suma: 18, objeto: 'vaso', peso: 1 },
-    { tipo: 'vecino', zona: 'patio', suma: 18, objeto: 'bolsa', peso: 1.5 },
-    { tipo: 'nietos', zona: 'casa', suma: 22, objeto: null, peso: 1.5 },
+    // Lo que se escapa ensucia mucho: frenarlo a tiempo es lo que más rinde.
+    { tipo: 'perro', zona: 'vereda', suma: 50, objeto: 'caca', peso: 2 },
+    { tipo: 'pibe', zona: 'vereda', suma: 36, objeto: 'vaso', peso: 1 },
+    { tipo: 'vecino', zona: 'patio', suma: 36, objeto: 'bolsa', peso: 1.5 },
+    { tipo: 'nietos', zona: 'casa', suma: 44, objeto: null, peso: 1.5 },
   ];
 
   function aleatorio(estado) {
