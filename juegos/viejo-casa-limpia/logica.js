@@ -7,18 +7,18 @@
     velocidadTrabajo: 30, // problema quitado por segundo
     // Cuánto empeora cada zona por segundo al comienzo.
     deterioro: { patio: 3, casa: 2, vereda: 1.2 },
-    rampa: 75, // el deterioro suma su valor base cada 75 s (crecimiento lineal)
+    rampa: 100, // el deterioro suma su valor base cada 100 s (crecimiento lineal)
     avisoEvento: 2,
-    // Lo que se frena llegando a tiempo: el aviso alcanza para reaccionar (~0.4 s) y caminar
-    // una zona (1.1 s), no dos: desde la otra punta de la casa no se llega. Con el tiempo se
-    // acorta. Ajustado con un bot que reacciona en 0.5 s: frena ~60% y dura ~47 s.
+    // Lo que se frena llegando a tiempo: al principio el aviso alcanza para reaccionar con
+    // calma (~1 s) y caminar una zona (1.1 s); con el tiempo se acorta. Ajustado con un bot
+    // que tarda 1 s en reaccionar: frena ~60% y dura ~65 s (test/balance-viejo.test.js).
     // `llegada`: fracción del aviso en que terminan de entrar.
-    espantable: { avisoInicial: 2.4, avisoMinimo: 1.6, rampa: 60, llegada: 0.35 },
+    espantable: { avisoInicial: 2.8, avisoMinimo: 1.8, rampa: 90, llegada: 0.35 },
     avisoPerroDueno: 2.5,
     unidadMugre: 8, // cada 8 puntos de problema entra un objeto tirado en la zona
-    intervaloInicial: 4.5, // segundos entre eventos al empezar...
-    intervaloDescenso: 15, // ...que bajan 1 s cada 15 s de partida...
-    intervaloMinimo: 2, // ...hasta este piso
+    intervaloInicial: 5, // segundos entre eventos al empezar...
+    intervaloDescenso: 18, // ...que bajan 1 s cada 18 s de partida...
+    intervaloMinimo: 2.3, // ...hasta este piso
     primerEvento: 3, // a los 3 s entra el primer perro: el gancho del video
     perroCadaMaximo: 3, // nunca pasan más de 3 eventos seguidos sin un perro
     sinRepetirHasta: 60, // antes de esto, dos eventos seguidos nunca caen en la misma zona

@@ -217,8 +217,8 @@ test('perros sueltos y con dueño se alternan, y el suelto da tiempo de llegar d
   for (let i = 1; i < perros.length; i++) assert.notEqual(perros[i].conDueno, perros[i - 1].conDueno);
   const unaZona = 1 / V.CONFIG.velocidadViejo;
   const dosZonas = 2 / V.CONFIG.velocidadViejo;
-  assert.ok(V.avisoEspantable(0) > unaZona + 0.4);
-  assert.ok(V.avisoEspantable(0) < dosZonas + 0.4); // desde la otra punta no se llega: hay que elegir
+  assert.ok(V.avisoEspantable(0) > unaZona + 1); // desde al lado se llega aunque tardes 1 s en reaccionar
+  assert.ok(V.avisoEspantable(0) < dosZonas + 1); // desde la otra punta, no: hay que elegir dónde pararse
   assert.ok(V.avisoEspantable(300) < V.avisoEspantable(0));
   assert.equal(V.avisoEspantable(1000), V.CONFIG.espantable.avisoMinimo);
 });

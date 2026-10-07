@@ -1,10 +1,10 @@
-// Balance de El Viejo y su Casa Limpia medido con un bot que juega como una persona:
-// reacciona 0.5 s después de que aparece algo y va a lo más urgente.
+// Balance de El Viejo y su Casa Limpia medido con bots que juegan como personas:
+// reaccionan un rato después de que aparece algo y van a lo más urgente.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const V = require('../juegos/viejo-casa-limpia/logica.js');
 
-function jugar(semilla) {
+function jugar(semilla, reaccion) {
   const e = V.crearEstado(semilla);
   const visto = new Map();
   let zona = 1;
@@ -12,7 +12,7 @@ function jugar(semilla) {
   let frenados = 0;
   while (e.fase === 'jugando' && e.segundos < 180) {
     for (const ev of e.eventos) if (!visto.has(ev)) { visto.set(ev, e.segundos); eventos++; }
-    const urgentes = e.eventos.filter((ev) => e.segundos - visto.get(ev) > 0.5).sort((a, b) => a.aviso - b.aviso);
+    const urgentes = e.eventos.filter((ev) => e.segundos - visto.get(ev) > reaccion).sort((a, b) => a.aviso - b.aviso);
     if (urgentes.length) {
       zona = V.ZONAS.indexOf(urgentes[0].zona);
     } else {
@@ -25,11 +25,20 @@ function jugar(semilla) {
   return { segundos: e.segundos, eventos, frenados };
 }
 
-test('un buen jugador dura alrededor de un minuto y no frena todo', () => {
-  const partidas = Array.from({ length: 80 }, (_, i) => jugar((i + 1) * 104729));
+function medir(reaccion) {
+  const partidas = Array.from({ length: 80 }, (_, i) => jugar((i + 1) * 104729, reaccion));
   const duraciones = partidas.map((p) => p.segundos).sort((a, b) => a - b);
-  const mediana = duraciones[40];
   const frenados = partidas.reduce((s, p) => s + p.frenados, 0) / partidas.reduce((s, p) => s + p.eventos, 0);
-  assert.ok(mediana > 35 && mediana < 70, `mediana ${mediana.toFixed(1)} s`);
-  assert.ok(frenados > 0.45 && frenados < 0.75, `frenados ${(frenados * 100).toFixed(0)}%`);
+  return { mediana: duraciones[40], frenados };
+}
+
+test('alguien que recién empieza (reacciona en 1 s) dura un minuto y frena más de la mitad', () => {
+  const { mediana, frenados } = medir(1);
+  assert.ok(mediana > 50 && mediana < 85, `mediana ${mediana.toFixed(1)} s`);
+  assert.ok(frenados > 0.5 && frenados < 0.75, `frenados ${(frenados * 100).toFixed(0)}%`);
+});
+
+test('un jugador rápido (0.5 s) no frena todo: el juego sigue teniendo desafío', () => {
+  const { frenados } = medir(0.5);
+  assert.ok(frenados < 0.8, `frenados ${(frenados * 100).toFixed(0)}%`);
 });
