@@ -74,9 +74,10 @@
   };
 
 
-  const entrada = { zona: null, trabajar: false };
+  const entrada = { zona: null, trabajar: false, puntero: null };
   let estado = V.crearEstado(Date.now());
   let record = Lienzo.leerRecord(CLAVE_RECORD);
+  let recordAnterior = record; // el récord antes de la última partida, para no festejar un empate
   let reloj = 0; // tiempo de pantalla, para animaciones
   let sacudon = 0;
   let particulas = [];
@@ -156,6 +157,10 @@
   // ---------- Entrada ----------
   function reiniciar() {
     estado = V.crearEstado(Date.now());
+    // La partida nueva arranca con el viejo quieto en la casa, sin el destino de la anterior.
+    entrada.zona = null;
+    entrada.trabajar = false;
+    entrada.puntero = null;
     particulas = [];
     pisadas = [];
     actores = [];
@@ -179,10 +184,12 @@
     if (zona < 0) return; // tocó el marcador de abajo
     entrada.zona = zona;
     entrada.trabajar = true;
+    entrada.puntero = e.pointerId;
     toques.push({ x: p.x, y: p.y, vida: 0.4 });
   });
   for (const tipo of ['pointerup', 'pointercancel', 'pointerleave']) {
-    canvas.addEventListener(tipo, () => { entrada.trabajar = false; });
+    // Solo suelta el dedo que manda: otro dedo que se levanta no corta el trabajo.
+    canvas.addEventListener(tipo, (e) => { if (e.pointerId === entrada.puntero) entrada.trabajar = false; });
   }
   const TECLAS_ZONA = { ArrowUp: -1, ArrowDown: 1 };
   window.addEventListener('keydown', (e) => {
@@ -713,7 +720,7 @@
           ctx.textAlign = 'center';
           ctx.fillText('¡PAF!', x - 10, 380 + a.s * 20);
         }
-        if (a.fase === 'huyendo' && a.s < 1.4) dibujarGlobo(x, 360, a.grito);
+        if (a.fase === 'huyendo' && a.s < 1.4) dibujarGlobo(x, 300, a.grito); // más arriba que el del viejo
       } }];
       if (tira) {
         const t = (p - 0.8) / 0.2;
@@ -803,19 +810,30 @@
     return figuras;
   }
 
-  function dibujarGlobo(x, y, texto) {
+  // Globo de diálogo arriba de (x, y). Las frases largas van en dos renglones, nunca tapa las
+  // barras de la derecha y, si arriba no entra, va a `yAbajo` en vez de taparle la cara a nadie.
+  const ANCHO_GLOBO = 270;
+  function dibujarGlobo(x, y, texto, yAbajo) {
     ctx.font = 'bold 14px system-ui';
-    const ancho = Math.min(ANCHO - 20, ctx.measureText(texto).width + 20);
+    const renglones = [];
+    for (const palabra of texto.split(' ')) {
+      const ultimo = renglones[renglones.length - 1];
+      if (ultimo && ctx.measureText(`${ultimo} ${palabra}`).width <= ANCHO_GLOBO - 20) renglones[renglones.length - 1] = `${ultimo} ${palabra}`;
+      else renglones.push(palabra);
+    }
+    const ancho = Math.max(...renglones.map((t) => ctx.measureText(t).width)) + 20;
+    const alto = 12 + renglones.length * 18;
     const bx = Math.max(10, Math.min(ANCHO - ancho - 40, x - 30)); // sin tapar las barras
-    const by = Math.max(6, y - 40);
+    let by = y - 10 - alto;
+    if (by < 6) by = yAbajo !== undefined ? yAbajo : 6;
     ctx.fillStyle = '#fff';
     ctx.strokeStyle = '#222';
     ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(bx, by, ancho, 30, 10); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(bx, by, ancho, alto, 10); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#222';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(texto, bx + 10, by + 15, ancho - 20);
+    renglones.forEach((t, k) => ctx.fillText(t, bx + 10, by + 15 + k * 18));
   }
 
   function dibujarHud() {
@@ -847,7 +865,7 @@
     Lienzo.textoCentrado(ctx, 'Se te vino la noche, abuelo.', 215, 22, '#fff');
     Lienzo.textoCentrado(ctx, CAUSAS[estado.perdioPor], 245, 16, '#ccc');
     Lienzo.textoCentrado(ctx, `${Math.floor(estado.segundos)}s`, 310, 64, '#ffd34d');
-    const nuevo = Math.floor(estado.segundos) >= record;
+    const nuevo = Math.floor(estado.segundos) > recordAnterior; // empatar no es récord
     Lienzo.textoCentrado(ctx, nuevo ? '¡Nuevo récord!' : `Tu récord: ${record}s`, 365, 18, nuevo ? '#7bed9f' : '#ccc');
     const logros = [];
     if (estado.perrosEspantados > 0) logros.push(`Perros espantados: ${estado.perrosEspantados}`);
@@ -983,6 +1001,7 @@
     const estabaJugando = estado.fase === 'jugando';
     V.paso(estado, dt, entrada);
     if (estabaJugando && estado.fase === 'fin') {
+      recordAnterior = record;
       record = Lienzo.guardarRecord(CLAVE_RECORD, Math.floor(estado.segundos));
       finDesde = reloj;
       SONIDOS.perder();
@@ -1030,7 +1049,7 @@
       ctx.beginPath(); ctx.arc(t.x, t.y, 10 + (0.4 - t.vida) * 60, 0, Math.PI * 2); ctx.stroke();
     }
     V.ZONAS.forEach((z, i) => dibujarBarra(z, i, caminando));
-    if (globo) dibujarGlobo(viejo.x, viejo.y - 100, globo.texto);
+    if (globo) dibujarGlobo(viejo.x, viejo.y - 100, globo.texto, viejo.y + 6);
     ctx.restore();
     dibujarHud();
     if (estado.fase === 'fin') dibujarFin();

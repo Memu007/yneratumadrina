@@ -129,6 +129,7 @@
     estado.recienLevantadas = [];
     if (estado.fase !== 'jugando') return estado;
     estado.segundos += dt;
+    const yAntes = estado.y;
 
     if (entrada.zona !== null && entrada.zona !== undefined) {
       const destino = Math.max(0, Math.min(ZONAS.length - 1, entrada.zona));
@@ -142,7 +143,8 @@
       estado.problemas[zona] += CONFIG.deterioro[zona] * m * dt;
     }
 
-    const quieto = Math.abs(estado.y - zonaActual(estado)) < 0.05;
+    // Solo está en una zona si se quedó parado ahí este paso: cruzarla caminando no cuenta.
+    const quieto = estado.y === yAntes && estado.y === zonaActual(estado);
     const trabajando = entrada.trabajar && quieto;
     const zonaViejo = ZONAS[zonaActual(estado)];
     if (trabajando) {
@@ -173,7 +175,7 @@
         estado.recienEspantados.push(e);
         continue;
       }
-      if (e.tipo === 'perro' && e.conDueno && viejoAhi && !e.testigo) {
+      if (e.tipo === 'perro' && e.conDueno && viejoAhi && llego && !e.testigo) {
         // Con dueño no se espanta: el dueño se siente vigilado y va a tener que levantarla.
         e.testigo = true;
         estado.recienPuteadas.push(e);

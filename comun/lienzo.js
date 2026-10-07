@@ -16,6 +16,11 @@
     }
     window.addEventListener('resize', ajustar);
     ajustar();
+    // Mantener apretado es la mecánica: que el celular no abra menús ni seleccione texto.
+    canvas.style.userSelect = 'none';
+    canvas.style.webkitUserSelect = 'none';
+    canvas.style.webkitTouchCallout = 'none';
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     return ctx;
   }
 
@@ -45,21 +50,27 @@
     requestAnimationFrame(cuadro);
   }
 
+  // Copia en memoria: sin almacenamiento (modo privado) el récord vale por la sesión y no baja.
+  const recordsEnMemoria = new Map();
+
   function leerRecord(clave) {
+    let guardado = 0;
     try {
-      return Number(localStorage.getItem(clave)) || 0;
+      guardado = Number(localStorage.getItem(clave)) || 0;
     } catch {
-      return 0;
+      // Sin almacenamiento: queda lo de memoria.
     }
+    return Math.max(guardado, recordsEnMemoria.get(clave) || 0);
   }
 
   function guardarRecord(clave, valor) {
     const actual = leerRecord(clave);
     if (valor <= actual) return actual;
+    recordsEnMemoria.set(clave, valor);
     try {
       localStorage.setItem(clave, String(valor));
     } catch {
-      // Sin almacenamiento (modo privado): el récord vale solo por esta partida.
+      // Sin almacenamiento: queda en memoria.
     }
     return valor;
   }
