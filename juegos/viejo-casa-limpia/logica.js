@@ -4,23 +4,25 @@
   const ZONAS = ['patio', 'casa', 'vereda'];
   const CONFIG = {
     velocidadViejo: 0.9, // zonas por segundo: el viejo es lento a propósito
-    velocidadTrabajo: 30, // problema quitado por segundo
+    velocidadTrabajo: 20, // problema quitado por segundo
     // Cuánto empeora cada zona por segundo al comienzo.
     // Muy desparejo a propósito: el pasto se come todo y la vereda casi no se ensucia sola.
     // Repartir el tiempo parejo (rotar sin mirar) pierde; hay que mirar qué necesita cada zona.
-    deterioro: { patio: 5, casa: 1.2, vereda: 0.4 },
-    rampa: 110, // el deterioro suma su valor base cada 110 s (crecimiento lineal)
+    deterioro: { patio: 2.5, casa: 0.5, vereda: 0.15 },
+    rampa: 90, // el deterioro suma su valor base cada 90 s (crecimiento lineal)
     avisoEvento: 2,
     // Lo que se frena llegando a tiempo: al principio el aviso alcanza para reaccionar con
     // calma (~1 s) y caminar una zona (1.1 s); con el tiempo se acorta. Ajustado con bots
-    // (test/balance-viejo.test.js): atento dura ~45 s y frena ~60%; rotando sin mirar, ~25 s.
+    // (test/balance-viejo.test.js): atento dura ~55 s y frena ~65%; rotando sin mirar, ~35 s.
     // `llegada`: fracción del aviso en que terminan de entrar.
     espantable: { avisoInicial: 2.8, avisoMinimo: 1.8, rampa: 90, llegada: 0.35 },
     avisoPerroDueno: 2.5,
     unidadMugre: 8, // cada 8 puntos de problema es un lugar de mugre a la vista (hoja u objeto)
-    intervaloInicial: 5, // segundos entre eventos al empezar...
-    intervaloDescenso: 18, // ...que bajan 1 s cada 18 s de partida...
-    intervaloMinimo: 2.3, // ...hasta este piso
+    // Muchos eventos livianos en vez de pocos pesados: las barras suben despacio y lo que
+    // decide la partida es frenar a tiempo lo que va llegando.
+    intervaloInicial: 3.5, // segundos entre eventos al empezar...
+    intervaloDescenso: 15, // ...que bajan 1 s cada 15 s de partida...
+    intervaloMinimo: 1.6, // ...hasta este piso
     primerEvento: 3, // a los 3 s entra el primer perro: el gancho del video
     perroCadaMaximo: 3, // nunca pasan más de 3 eventos seguidos sin un perro
     sinRepetirHasta: 60, // antes de esto, dos eventos seguidos nunca caen en la misma zona
@@ -31,10 +33,10 @@
   // `peso`: qué tan seguido sale cada evento; el perro es la estrella.
   const EVENTOS = [
     // Lo que se escapa ensucia mucho: frenarlo a tiempo es lo que más rinde.
-    { tipo: 'perro', zona: 'vereda', suma: 50, objeto: 'caca', peso: 2 },
-    { tipo: 'pibe', zona: 'vereda', suma: 36, objeto: 'vaso', peso: 1 },
-    { tipo: 'vecino', zona: 'patio', suma: 36, objeto: 'bolsa', peso: 1.5 },
-    { tipo: 'nietos', zona: 'casa', suma: 44, objeto: null, peso: 1.5 },
+    { tipo: 'perro', zona: 'vereda', suma: 35, objeto: 'caca', peso: 2 },
+    { tipo: 'pibe', zona: 'vereda', suma: 25, objeto: 'vaso', peso: 1 },
+    { tipo: 'vecino', zona: 'patio', suma: 25, objeto: 'bolsa', peso: 1.5 },
+    { tipo: 'nietos', zona: 'casa', suma: 31, objeto: null, peso: 1.5 },
   ];
 
   function aleatorio(estado) {

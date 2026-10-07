@@ -93,6 +93,7 @@
   let posViejoPrevia = null;
   let finDesde = 0;
   let proximoSonidoTrabajo = 0;
+  let barrasVisibles = { ...estado.problemas }; // lo que muestran las barras, que sigue a la lógica
   let escobazoHasta = 0; // mientras dure, el viejo revolea la escoba
   let decirLuego = null; // respuesta del viejo que llega un momento después
   let estabaTrabajando = false;
@@ -161,6 +162,7 @@
     entrada.zona = null;
     entrada.trabajar = false;
     entrada.puntero = null;
+    barrasVisibles = { ...estado.problemas };
     particulas = [];
     pisadas = [];
     actores = [];
@@ -563,7 +565,7 @@
     const [y0, y1] = FRANJAS[zona];
     // Mientras el viejo camina, la zona que dejó parpadea.
     if (caminando && i === zonaQuieta && Math.floor(reloj * 6) % 2 === 0) return;
-    const nivel = estado.problemas[zona];
+    const nivel = barrasVisibles[zona];
     const x = ANCHO - 32;
     const top = y0 + 40;
     const altoBarra = y1 - y0 - 52;
@@ -1014,6 +1016,8 @@
     const trabajando = entrada.trabajar && !caminando && estado.fase === 'jugando';
     sincronizarActores(dt);
     reaccionar(dt, viejo, caminando, trabajando);
+    // Las barras se deslizan hacia el valor real en ~0.4 s: un evento no las hace saltar de golpe.
+    for (const z of V.ZONAS) barrasVisibles[z] += (estado.problemas[z] - barrasVisibles[z]) * Math.min(1, dt * 8);
 
     ctx.save();
     if (sacudon > 0) {
