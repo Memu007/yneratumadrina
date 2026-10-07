@@ -544,7 +544,7 @@
     ctx.beginPath(); ctx.moveTo(0, 481); ctx.lineTo(ANCHO, 481); ctx.stroke();
     ctx.fillStyle = '#8a8a8a';
     ctx.fillRect(0, 522, ANCHO, 18);
-    const hojas = Math.max(0, Math.floor(nivel / V.CONFIG.unidadMugre) - estado.objetos.vereda.length);
+    const hojas = V.hojasSueltas(estado);
     HOJAS.slice(0, hojas).forEach(([x, y]) => dibujarHoja(x, y));
     dibujarObjetos('vereda');
   }

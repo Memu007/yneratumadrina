@@ -17,7 +17,7 @@
     // `llegada`: fracción del aviso en que terminan de entrar.
     espantable: { avisoInicial: 2.8, avisoMinimo: 1.8, rampa: 90, llegada: 0.35 },
     avisoPerroDueno: 2.5,
-    unidadMugre: 8, // cada 8 puntos de problema entra un objeto tirado en la zona
+    unidadMugre: 8, // cada 8 puntos de problema es un lugar de mugre a la vista (hoja u objeto)
     intervaloInicial: 5, // segundos entre eventos al empezar...
     intervaloDescenso: 18, // ...que bajan 1 s cada 18 s de partida...
     intervaloMinimo: 2.3, // ...hasta este piso
@@ -71,6 +71,15 @@
       recienPuteadas: [],
       recienLevantadas: [],
     };
+  }
+
+  function lugaresOcupados(estado, zona) {
+    return estado.objetos[zona].reduce((suma, o) => suma + o.lugares, 0);
+  }
+
+  // Hojas secas a la vista en la vereda: la mugre que se juntó sola, sin que nadie tire nada.
+  function hojasSueltas(estado) {
+    return Math.max(0, Math.floor(estado.problemas.vereda / CONFIG.unidadMugre) - lugaresOcupados(estado, 'vereda'));
   }
 
   function zonaActual(estado) {
@@ -190,7 +199,9 @@
         estado.recienLevantadas.push(e);
       } else if (e.aviso <= 0) {
         estado.problemas[e.zona] += e.suma;
-        if (e.objeto) estado.objetos[e.zona].push({ tipo: e.objeto, lugar: e.lugar });
+        // Lo tirado ocupa los lugares de mugre de lo que ensució: una caca de 50 puntos no
+        // viene con hojas que nadie tiró.
+        if (e.objeto) estado.objetos[e.zona].push({ tipo: e.objeto, lugar: e.lugar, lugares: Math.round(e.suma / CONFIG.unidadMugre) });
         estado.recienCaidos.push(e);
       } else {
         pendientes.push(e);
@@ -202,7 +213,7 @@
       estado.problemas[zona] = Math.max(0, estado.problemas[zona]);
       // Al limpiar se levanta primero lo más viejo.
       const capacidad = Math.floor(estado.problemas[zona] / CONFIG.unidadMugre);
-      while (estado.objetos[zona].length > capacidad) estado.objetos[zona].shift();
+      while (estado.objetos[zona].length && lugaresOcupados(estado, zona) > capacidad) estado.objetos[zona].shift();
       if (estado.problemas[zona] >= 100 && estado.fase === 'jugando') {
         estado.problemas[zona] = 100;
         estado.fase = 'fin';
@@ -212,7 +223,7 @@
     return estado;
   }
 
-  const api = { ZONAS, CONFIG, EVENTOS, crearEstado, paso, zonaActual, intervaloEventos, avisoEspantable };
+  const api = { ZONAS, CONFIG, EVENTOS, crearEstado, paso, zonaActual, intervaloEventos, avisoEspantable, hojasSueltas };
   if (typeof module !== 'undefined') module.exports = api;
   else root.ViejoCasaLimpia = api;
 })(globalThis);
