@@ -169,7 +169,7 @@ test('el perro deja una caca en el lugar donde se agachó y barriendo se levanta
   e.problemas.vereda = 0;
   e.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 25, objeto: 'caca', lugar: 0.4, aviso: 0.05, conDueno: true }];
   V.paso(e, 0.1, quieto);
-  assert.deepEqual(e.objetos.vereda, [{ tipo: 'caca', lugar: 0.4 }]);
+  assert.deepEqual(e.objetos.vereda, [{ tipo: 'caca', lugar: 0.4, lugares: 3 }]);
   e.y = 2;
   for (let i = 0; i < 20; i++) V.paso(e, 0.1, { zona: null, trabajar: true });
   assert.equal(e.objetos.vereda.length, 0);
@@ -241,7 +241,7 @@ test('si no llegás, el pibe tira el vaso y queda en la vereda', () => {
   e.eventos = [{ tipo: 'pibe', zona: 'vereda', suma: 18, objeto: 'vaso', lugar: 0.3, aviso: 0.05, avisoTotal: 3 }];
   V.paso(e, 0.1, quieto);
   assert.equal(e.pibesCorridos, 0);
-  assert.deepEqual(e.objetos.vereda, [{ tipo: 'vaso', lugar: 0.3 }]);
+  assert.deepEqual(e.objetos.vereda, [{ tipo: 'vaso', lugar: 0.3, lugares: 2 }]);
 });
 
 test('el pibe da el mismo margen que el perro suelto para llegar', () => {
@@ -274,7 +274,7 @@ test('si el viejo no está, el vecino tira la bolsa al patio', () => {
   e.eventos = [{ tipo: 'vecino', zona: 'patio', suma: 18, objeto: 'bolsa', lugar: 0.5, aviso: 0.05, avisoTotal: 3 }];
   V.paso(e, 0.1, quieto);
   assert.equal(e.vecinosRetados, 0);
-  assert.deepEqual(e.objetos.patio, [{ tipo: 'bolsa', lugar: 0.5 }]);
+  assert.deepEqual(e.objetos.patio, [{ tipo: 'bolsa', lugar: 0.5, lugares: 2 }]);
 });
 
 test('si el viejo está en la casa, los nietos se sacan las zapatillas y no embarran', () => {
@@ -337,4 +337,22 @@ test('el dueño no ve al viejo antes de terminar de entrar', () => {
   V.paso(e, 0.05, quieto);
   assert.equal(e.recienPuteadas.length, 0);
   assert.equal(e.eventos[0].testigo, false);
+});
+
+test('cuando el perro caga aparece la caca, no hojas que nadie tiró', () => {
+  const e = V.crearEstado(3);
+  e.proximoEvento = 999;
+  e.y = 0;
+  e.problemas.vereda = 0;
+  e.eventos = [{ tipo: 'perro', zona: 'vereda', suma: 50, objeto: 'caca', lugar: 0.5, aviso: 0.05, avisoTotal: 2.5, conDueno: true }];
+  V.paso(e, 0.1, quieto);
+  assert.equal(e.objetos.vereda.length, 1);
+  assert.equal(V.hojasSueltas(e), 0);
+  // La vereda se sigue ensuciando sola de a poco: ahí sí aparecen hojas.
+  for (let i = 0; i < 300; i++) {
+    V.paso(e, 0.1, quieto);
+    e.problemas.patio = 0; // que no pierda por el pasto mientras tanto
+  }
+  assert.equal(e.fase, 'jugando');
+  assert.ok(V.hojasSueltas(e) > 0);
 });
