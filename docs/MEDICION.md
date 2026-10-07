@@ -18,3 +18,4 @@ en cada revisión.
 
 | Fecha | Momento | Qué | Propuso | Adoptadas | Cambió el resultado | Equivocadas |
 |---|---|---|---|---|---|---|
+| 2026-10-07 | Antes de retocar la dificultad | Balance que oscilaba entre muy difícil y muy fácil | 4 (no tocar margen de frenado, bajar sobrante, prueba de rotación antes de ajustar, medir frenados del que rota) | 4 | Sí: cambió la palanca (sobrante y asimetría, no el margen) | 0 |

@@ -25,6 +25,20 @@ function jugar(semilla, reaccion) {
   return { segundos: e.segundos, eventos, frenados };
 }
 
+// Jugador que rota patio → casa → vereda cada `periodo` segundos sin mirar nada.
+function rotar(semilla, periodo) {
+  const e = V.crearEstado(semilla);
+  while (e.fase === 'jugando' && e.segundos < 180) {
+    V.paso(e, 1 / 30, { zona: Math.floor(e.segundos / periodo) % 3, trabajar: true });
+  }
+  return e.segundos;
+}
+
+function mediana(valores) {
+  const orden = [...valores].sort((a, b) => a - b);
+  return orden[Math.floor(orden.length / 2)];
+}
+
 function medir(reaccion) {
   const partidas = Array.from({ length: 80 }, (_, i) => jugar((i + 1) * 104729, reaccion));
   const duraciones = partidas.map((p) => p.segundos).sort((a, b) => a - b);
@@ -34,11 +48,25 @@ function medir(reaccion) {
 
 test('alguien que recién empieza (reacciona en 1 s) dura un minuto y frena más de la mitad', () => {
   const { mediana, frenados } = medir(1);
-  assert.ok(mediana > 50 && mediana < 85, `mediana ${mediana.toFixed(1)} s`);
+  assert.ok(mediana > 40 && mediana < 70, `mediana ${mediana.toFixed(1)} s`);
   assert.ok(frenados > 0.5 && frenados < 0.75, `frenados ${(frenados * 100).toFixed(0)}%`);
 });
 
 test('un jugador rápido (0.5 s) no frena todo: el juego sigue teniendo desafío', () => {
   const { frenados } = medir(0.5);
   assert.ok(frenados < 0.8, `frenados ${(frenados * 100).toFixed(0)}%`);
+});
+
+test('mirar rinde: rotar sin mirar dura mucho menos que jugar atento', () => {
+  const atento = medir(1).mediana;
+  for (const periodo of [3, 4, 6]) {
+    const rotando = mediana(Array.from({ length: 60 }, (_, i) => rotar((i + 1) * 7919, periodo)));
+    assert.ok(rotando < 0.6 * atento, `rotando cada ${periodo} s dura ${rotando.toFixed(1)} s; atento ${atento.toFixed(1)} s`);
+  }
+});
+
+test('nadie aguanta para siempre: ninguna partida atenta pasa de 100 s', () => {
+  const partidas = Array.from({ length: 80 }, (_, i) => jugar((i + 1) * 104729, 0.5));
+  const maxima = Math.max(...partidas.map((p) => p.segundos));
+  assert.ok(maxima < 100, `la más larga duró ${maxima.toFixed(1)} s`);
 });
